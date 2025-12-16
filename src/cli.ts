@@ -3,7 +3,7 @@
 import * as p from "@clack/prompts";
 import { auto } from "./commands/auto.ts";
 import { createBranch } from "./commands/create-branch.ts";
-import { autoCommit } from "./commands/auto-commit.ts";
+import { commit } from "./commands/commit.ts";
 import { prSuggest } from "./commands/pr-suggest.ts";
 import { settings } from "./commands/settings.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
@@ -16,12 +16,12 @@ Usage:
   git-ai [command]
 
 Commands:
-  auto           Smart workflow: branch → commit → push → PR (recommended)
-  create-branch  Analyze changes and suggest a branch name
-  auto-commit    Generate AI-powered commit message from staged changes
-  pr-suggest     Generate PR title and description from branch commits
-  settings       Configure AI model, reasoning effort, and other settings
-  help           Show this help message
+  auto     Smart workflow: branch → commit → push → PR (recommended)
+  branch   Analyze changes and suggest a branch name
+  commit   Generate AI-powered commit message from staged changes
+  pr       Generate PR title and description from branch commits
+  settings Configure AI model, reasoning effort, and other settings
+  help     Show this help message
 
 Options:
   -h, --help     Show this help message
@@ -29,13 +29,13 @@ Options:
   -y, --yes      Auto-accept all prompts (blind mode)
 
 Examples:
-  git-ai                 # Interactive mode
-  git-ai auto            # Smart workflow (recommended for quick changes)
-  git-ai auto -y         # Auto mode with all prompts auto-accepted
-  git-ai create-branch   # Create branch from changes
-  git-ai auto-commit     # Generate commit message
-  git-ai pr-suggest      # Generate PR suggestion
-  git-ai settings        # Configure settings
+  git-ai          # Interactive mode
+  git-ai auto     # Smart workflow (recommended for quick changes)
+  git-ai auto -y  # Auto mode with all prompts auto-accepted
+  git-ai branch   # Create branch from changes
+  git-ai commit   # Generate commit message
+  git-ai pr       # Generate PR suggestion
+  git-ai settings # Configure settings
 
 Documentation:
   https://github.com/yourusername/git-ai-cli
@@ -103,27 +103,27 @@ async function runInteractive(): Promise<string> {
     options: [
       {
         value: "auto",
-        label: "🚀 Auto Mode (Recommended)",
-        hint: "Smart workflow: branch → commit → push → PR",
+        label: "auto: Smart workflow (recommended)",
+        hint: "branch → commit → push → PR",
       },
       {
-        value: "create-branch",
-        label: "Create branch from changes",
+        value: "branch",
+        label: "branch: Create branch from changes",
         hint: "Analyze changes and suggest a branch name",
       },
       {
-        value: "auto-commit",
-        label: "Generate commit message",
+        value: "commit",
+        label: "commit: Generate commit message",
         hint: "Analyze staged changes and suggest a commit message",
       },
       {
-        value: "pr-suggest",
-        label: "Generate PR title & description",
+        value: "pr",
+        label: "pr: Generate PR title & description",
         hint: "Based on branch commits and branch name",
       },
       {
         value: "settings",
-        label: "Configure settings",
+        label: "settings: Configure settings",
         hint: "Change model, reasoning effort, and other options",
       },
     ],
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
     action = commandArgs[0] as string;
 
     // Validate command
-    if (!["auto", "create-branch", "auto-commit", "pr-suggest", "settings"].includes(action)) {
+    if (!["auto", "branch", "commit", "pr", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -184,11 +184,11 @@ async function main(): Promise<void> {
   try {
     if (action === "auto") {
       await auto({ autoYes: yesFlag });
-    } else if (action === "create-branch") {
+    } else if (action === "branch") {
       await createBranch();
-    } else if (action === "auto-commit") {
-      await autoCommit();
-    } else if (action === "pr-suggest") {
+    } else if (action === "commit") {
+      await commit();
+    } else if (action === "pr") {
       await prSuggest();
     } else if (action === "settings") {
       await settings();

@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import { getStagedChanges, isGitRepository, hasUnstagedChanges, hasOriginRemote, addOriginRemote, pushToOrigin } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
 
-export async function autoCommit(): Promise<void> {
+export async function commit(): Promise<void> {
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
   if (!isRepo) {

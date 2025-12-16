@@ -16,19 +16,19 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - Creates GitHub Pull Request automatically
   - Perfect for quick fixes and features
 
-- **Auto Commit Generator**: Analyzes your staged changes and generates meaningful commit messages using AI
+- **Commit Generator**: Analyzes your staged changes and generates meaningful commit messages using AI
   - Automatically skips large files (>100KB) and migration files
   - Uses conventional commit format
   - Interactive TUI for reviewing and confirming commits
   - Optional automatic push to origin
 
-- **Create Branch**: Analyzes your changes and suggests appropriate branch names
+- **Branch Creator**: Analyzes your changes and suggests appropriate branch names
   - AI-powered branch name generation
   - Automatically determines branch type (feature/bugfix/chore/refactor)
   - Creates and switches to the new branch
   - Keeps your changes staged and ready to commit
 
-- **PR Suggestion**: Generates pull request titles and descriptions based on:
+- **PR Generator**: Generates pull request titles and descriptions based on:
   - Branch name
   - Commit messages
   - Branch comparison with base branch
@@ -152,14 +152,14 @@ git-ai
 ### Direct Commands
 Run specific commands directly:
 ```bash
-git-ai auto            # Smart workflow (recommended)
-git-ai auto -y         # Auto mode with all prompts auto-accepted (blind mode)
-git-ai create-branch   # Create branch from changes
-git-ai auto-commit     # Generate commit message
-git-ai pr-suggest      # Generate PR suggestion
-git-ai settings        # Configure settings
-git-ai --help          # Show help
-git-ai --version       # Show version
+git-ai auto      # Smart workflow (recommended)
+git-ai auto -y   # Auto mode with all prompts auto-accepted (blind mode)
+git-ai branch    # Create branch from changes
+git-ai commit    # Generate commit message
+git-ai pr        # Generate PR suggestion
+git-ai settings  # Configure settings
+git-ai --help    # Show help
+git-ai --version # Show version
 ```
 
 ### Commands
@@ -191,22 +191,22 @@ git-ai auto --yes
 
 Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
 
-#### Auto Commit
+#### Commit
 Generates a commit message from your staged changes:
 ```bash
 # Stage your changes first
 git add .
 
-# Run the tool and select "Generate commit message"
-git-ai auto-commit
+# Generate commit message
+git-ai commit
 ```
 
-#### Create Branch
+#### Branch
 Analyzes your changes and creates a new branch with an AI-generated name:
 ```bash
 # Make some changes (staged or unstaged)
-# Run the tool and select "Create branch from changes"
-git-ai create-branch
+# Create branch from changes
+git-ai branch
 ```
 
 The tool will:
@@ -215,12 +215,12 @@ The tool will:
 3. Create and switch to the new branch
 4. Keep your changes staged
 
-#### PR Suggestion
+#### PR
 Generates PR title and description from your branch commits:
 ```bash
 # Make sure you're on a feature branch with commits
-# Run the tool and select "Generate PR title & description"
-git-ai pr-suggest
+# Generate PR title & description
+git-ai pr
 ```
 
 The tool can also create the GitHub PR directly if you have a `GITHUB_TOKEN` configured.
