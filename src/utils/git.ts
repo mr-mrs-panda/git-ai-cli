@@ -432,3 +432,188 @@ export async function prExistsForBranch(
     return { exists: false };
   }
 }
+
+/**
+ * Get all local branches
+ */
+export async function getLocalBranches(): Promise<string[]> {
+  try {
+    const proc = Bun.spawn(["git", "branch", "--format=%(refname:short)"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return [];
+    }
+
+    const output = await new Response(proc.stdout).text();
+    return output
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((b) => b.trim());
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get remote branches (origin/*) merged into the given base ref.
+ * Returns short names without the "origin/" prefix.
+ */
+export async function getRemoteMergedBranches(baseRef: string): Promise<string[]> {
+  try {
+    const proc = Bun.spawn(["git", "branch", "-r", "--merged", baseRef, "--format=%(refname:short)"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return [];
+    }
+
+    const output = await new Response(proc.stdout).text();
+    return output
+      .trim()
+      .split("\n")
+      .map((b) => b.trim())
+      .filter(Boolean)
+      .filter((b) => b.startsWith("origin/"))
+      .filter((b) => b !== "origin/HEAD")
+      .map((b) => b.replace(/^origin\//, ""));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Delete a remote branch from origin.
+ */
+export async function deleteRemoteBranch(branchName: string): Promise<void> {
+  const proc = Bun.spawn(["git", "push", "origin", "--delete", branchName], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to delete remote branch 'origin/${branchName}'`);
+  }
+}
+
+/**
+ * Check if a branch exists on the remote
+ */
+export async function branchExistsOnRemote(branchName: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(["git", "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branchName}`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a branch is merged into the base branch
+ */
+export async function isBranchMerged(branchName: string, baseBranchOrRef?: string): Promise<boolean> {
+  try {
+    const base = baseBranchOrRef || (await getBaseBranch());
+    const proc = Bun.spawn(["git", "branch", "--merged", base, "--format=%(refname:short)"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return false;
+    }
+
+    const output = await new Response(proc.stdout).text();
+    const mergedBranches = output
+      .trim()
+      .split("\n")
+      .map((b) => b.trim())
+      .filter(Boolean);
+
+    return mergedBranches.includes(branchName);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check whether `maybeAncestor` is an ancestor of `ref`.
+ * Uses exit codes of `git merge-base --is-ancestor`.
+ */
+export async function isAncestor(maybeAncestor: string, ref: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(["git", "merge-base", "--is-ancestor", maybeAncestor, ref], {
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    await proc.exited;
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch from origin
+ */
+export async function fetchOrigin(): Promise<void> {
+  const proc = Bun.spawn(["git", "fetch", "--prune", "origin"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to fetch from origin");
+  }
+}
+
+/**
+ * Delete a local branch
+ */
+export async function deleteLocalBranch(branchName: string, force: boolean = false): Promise<void> {
+  const args = force ? ["git", "branch", "-D", branchName] : ["git", "branch", "-d", branchName];
+
+  const proc = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to delete branch '${branchName}'`);
+  }
+}
+
+/**
+ * Switch to a branch
+ */
+export async function switchToBranch(branchName: string): Promise<void> {
+  const proc = Bun.spawn(["git", "checkout", branchName], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to switch to branch '${branchName}'`);
+  }
+}

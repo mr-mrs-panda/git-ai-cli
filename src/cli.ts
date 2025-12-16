@@ -6,6 +6,7 @@ import { createBranch } from "./commands/create-branch.ts";
 import { commit } from "./commands/commit.ts";
 import { prSuggest } from "./commands/pr-suggest.ts";
 import { settings } from "./commands/settings.ts";
+import { cleanup } from "./commands/cleanup.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
 
 function showHelp(): void {
@@ -20,6 +21,7 @@ Commands:
   branch   Analyze changes and suggest a branch name
   commit   Generate AI-powered commit message from staged changes
   pr       Generate PR title and description from branch commits
+  cleanup  Delete local branches that are merged in remote
   settings Configure AI model, reasoning effort, and other settings
   help     Show this help message
 
@@ -35,6 +37,7 @@ Examples:
   git-ai branch   # Create branch from changes
   git-ai commit   # Generate commit message
   git-ai pr       # Generate PR suggestion
+  git-ai cleanup  # Clean up merged branches
   git-ai settings # Configure settings
 
 Documentation:
@@ -122,6 +125,11 @@ async function runInteractive(): Promise<string> {
         hint: "Based on branch commits and branch name",
       },
       {
+        value: "cleanup",
+        label: "cleanup: Delete merged branches",
+        hint: "Clean up local branches that are merged in remote",
+      },
+      {
         value: "settings",
         label: "settings: Configure settings",
         hint: "Change model, reasoning effort, and other options",
@@ -165,7 +173,7 @@ async function main(): Promise<void> {
     action = commandArgs[0] as string;
 
     // Validate command
-    if (!["auto", "branch", "commit", "pr", "settings"].includes(action)) {
+    if (!["auto", "branch", "commit", "pr", "cleanup", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -175,8 +183,8 @@ async function main(): Promise<void> {
     action = await runInteractive();
   }
 
-  // Ensure API key is configured (skip for settings command)
-  if (action !== "settings") {
+  // Ensure API key is configured (skip for settings and cleanup commands)
+  if (action !== "settings" && action !== "cleanup") {
     await ensureApiKey();
   }
 
@@ -190,6 +198,8 @@ async function main(): Promise<void> {
       await commit();
     } else if (action === "pr") {
       await prSuggest();
+    } else if (action === "cleanup") {
+      await cleanup();
     } else if (action === "settings") {
       await settings();
     }
