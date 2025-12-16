@@ -5,6 +5,7 @@ export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 
 export interface Config {
   openaiApiKey?: string;
+  githubToken?: string;
   model?: string;
   temperature?: number;
   reasoningEffort?: ReasoningEffort;
@@ -112,6 +113,35 @@ export async function updateConfig(updates: Partial<Config>): Promise<Config> {
 export async function hasApiKey(): Promise<boolean> {
   const config = await loadConfig();
   return !!config.openaiApiKey && config.openaiApiKey.length > 0;
+}
+
+/**
+ * Check if GitHub token is configured
+ */
+export async function hasGitHubToken(): Promise<boolean> {
+  const config = await loadConfig();
+  return !!config.githubToken && config.githubToken.length > 0;
+}
+
+/**
+ * Get GitHub token from config or environment variable
+ * Config takes precedence over environment variable
+ */
+export async function getGitHubToken(): Promise<string | null> {
+  const config = await loadConfig();
+
+  // First check config
+  if (config.githubToken && config.githubToken.length > 0) {
+    return config.githubToken;
+  }
+
+  // Fall back to environment variable
+  const envToken = process.env.GITHUB_TOKEN;
+  if (envToken && envToken.length > 0) {
+    return envToken;
+  }
+
+  return null;
 }
 
 /**

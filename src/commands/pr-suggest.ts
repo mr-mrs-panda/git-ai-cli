@@ -232,18 +232,38 @@ async function createGitHubPR(title: string, description: string, currentBranch:
   }
 
   // Check for GitHub token
-  const githubToken = process.env.GITHUB_TOKEN;
+  let githubToken = await (await import("../utils/config.ts")).getGitHubToken();
+
   if (!githubToken) {
     p.note(
-      "GITHUB_TOKEN environment variable is not set.\n" +
-      "Please create a personal access token at:\n" +
-      "https://github.com/settings/tokens\n\n" +
-      "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)\n\n" +
-      "Then set it in your environment:\n" +
-      "export GITHUB_TOKEN=your_token_here",
+      "GitHub personal access token is required to create pull requests.\n" +
+      "You can create one at: https://github.com/settings/tokens\n\n" +
+      "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)",
       "GitHub Token Required"
     );
-    return;
+
+    const token = await p.text({
+      message: "Enter your GitHub personal access token:",
+      placeholder: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      validate: (value) => {
+        if (!value || value.length === 0) return "Token is required";
+        if (!value.startsWith("ghp_") && !value.startsWith("github_pat_")) {
+          return "Token should start with 'ghp_' or 'github_pat_'";
+        }
+      },
+    });
+
+    if (p.isCancel(token)) {
+      p.cancel("PR creation cancelled");
+      return;
+    }
+
+    // Save token to config
+    spinner.start("Saving GitHub token to config...");
+    await (await import("../utils/config.ts")).updateConfig({ githubToken: token });
+    spinner.stop("GitHub token saved");
+
+    githubToken = token;
   }
 
   // Parse GitHub repo info
