@@ -180,7 +180,18 @@ export async function getBranchCommits(): Promise<GitCommit[]> {
 
   try {
     // Get commits that are in current branch but not in base branch
-    const logOutput = await $`git log ${baseBranch}..HEAD --pretty=format:%H|%s|%an|%ai`.text();
+    const formatString = "%H|%s|%an|%ai";
+    const proc = Bun.spawn(["git", "log", `${baseBranch}..HEAD`, `--pretty=format:${formatString}`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return [];
+    }
+
+    const logOutput = await new Response(proc.stdout).text();
 
     if (!logOutput.trim()) {
       return [];
