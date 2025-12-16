@@ -1,0 +1,24 @@
+{
+  "name": "git-ai-cli",
+  "version": "1.0.0",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "git-ai": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "bun build src/cli.ts --compile --outfile git-ai"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "openai": "^6.13.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
