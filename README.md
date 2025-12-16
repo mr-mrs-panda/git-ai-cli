@@ -258,6 +258,6 @@ The uninstaller will:
 ## Technology Stack
 
 - [Bun](https://bun.sh) - Fast JavaScript runtime
-- [OpenAI API](https://platform.openai.com/) - GPT-4 Turbo for AI generation
+- [OpenAI API](https://platform.openai.com/) - OpenAI API for AI generation
 - [@clack/prompts](https://github.com/natemoo-re/clack) - Modern CLI prompts
 - TypeScript - Type-safe development
