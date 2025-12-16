@@ -307,7 +307,7 @@ async function createGitHubPR(title: string, description: string, currentBranch:
     }
 
     // Create PR
-    spinner.start("Creating Pull Request...");
+    spinner.message("Creating Pull Request...");
     const { data } = await octokit.rest.pulls.create({
       owner,
       repo,
