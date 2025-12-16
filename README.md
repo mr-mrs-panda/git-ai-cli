@@ -8,6 +8,14 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
 
 ## Features
 
+- **🚀 Auto Mode (Recommended)**: Intelligent end-to-end workflow for quick changes
+  - Analyzes your current state and determines what needs to be done
+  - If on main/master: creates a new branch based on your changes
+  - Stages and commits changes with AI-generated message
+  - Pushes to origin
+  - Creates GitHub Pull Request automatically
+  - Perfect for quick fixes and features
+
 - **Auto Commit Generator**: Analyzes your staged changes and generates meaningful commit messages using AI
   - Automatically skips large files (>100KB) and migration files
   - Uses conventional commit format
@@ -144,15 +152,33 @@ git-ai
 ### Direct Commands
 Run specific commands directly:
 ```bash
-git-ai auto-commit    # Generate commit message
-git-ai create-branch  # Create branch from changes
-git-ai pr-suggest     # Generate PR suggestion
-git-ai settings       # Configure settings
-git-ai --help         # Show help
-git-ai --version      # Show version
+git-ai auto            # Smart workflow (recommended)
+git-ai create-branch   # Create branch from changes
+git-ai auto-commit     # Generate commit message
+git-ai pr-suggest      # Generate PR suggestion
+git-ai settings        # Configure settings
+git-ai --help          # Show help
+git-ai --version       # Show version
 ```
 
 ### Commands
+
+#### Auto Mode (Recommended)
+The intelligent workflow that handles everything for you:
+```bash
+# Make your changes
+# Run auto mode - it figures out what to do
+git-ai auto
+```
+
+**What it does:**
+1. If you're on `main`/`master`: Creates a new branch based on your changes
+2. Stages all changes
+3. Generates and commits with AI
+4. Pushes to origin
+5. Creates a GitHub Pull Request
+
+Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
 
 #### Auto Commit
 Generates a commit message from your staged changes:
