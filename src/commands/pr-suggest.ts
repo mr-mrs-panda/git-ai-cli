@@ -1,12 +1,42 @@
 import * as p from "@clack/prompts";
-import { getBranchInfo, isGitRepository } from "../utils/git.ts";
+import { Octokit } from "octokit";
+import { getBranchInfo, isGitRepository, isGitHubRepository, parseGitHubRepo, isBranchPushed, pushToOrigin, getBaseBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
 
 export async function prSuggest(): Promise<void> {
+
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
   if (!isRepo) {
     throw new Error("Not a git repository. Please run this command in a git repository.");
+  }
+
+  // Check for unstaged/uncommitted changes
+  const hasUnstaged = await (await import("../utils/git.ts")).hasUnstagedChanges();
+  if (hasUnstaged) {
+    const shouldCommit = await p.confirm({
+      message: "You have unstaged or uncommitted changes. Would you like to commit them with AI?",
+      initialValue: true,
+    });
+    if (p.isCancel(shouldCommit)) {
+      p.cancel("PR suggestion cancelled");
+      return;
+    }
+    if (!shouldCommit) {
+      p.note("Please commit and push your changes before creating a PR.", "Info");
+      return;
+    }
+
+    // Use the AI-powered commit service
+    const { generateAndCommit } = await import("../services/commit.ts");
+    const commitMessage = await generateAndCommit({
+      confirmBeforeCommit: true,
+    });
+
+    if (!commitMessage) {
+      p.cancel("PR suggestion cancelled");
+      return;
+    }
   }
 
   const spinner = p.spinner();
@@ -28,7 +58,7 @@ export async function prSuggest(): Promise<void> {
     spinner.stop("No commits found");
     p.note(
       `Your branch '${currentBranch}' has no commits compared to '${baseBranch}'.\n` +
-        "Make some commits first before generating a PR suggestion.",
+      "Make some commits first before generating a PR suggestion.",
       "Info"
     );
     return;
@@ -67,22 +97,36 @@ export async function prSuggest(): Promise<void> {
     p.note(title, "Suggested PR Title");
     p.note(description, "Suggested PR Description");
 
+    // Check if this is a GitHub repository
+    const isGitHub = await isGitHubRepository();
+
+    // Prepare action options
+    const options: Array<{ value: string; label: string }> = [];
+
+    if (isGitHub) {
+      options.push({ value: "create-pr", label: "Create GitHub Pull Request" });
+    }
+
+    options.push(
+      { value: "copy-title", label: "Copy title to clipboard" },
+      { value: "copy-desc", label: "Copy description to clipboard" },
+      { value: "copy-both", label: "Copy both (formatted)" },
+      { value: "nothing", label: "Nothing, just show me" }
+    );
+
     // Ask if user wants to copy
     const action = await p.select({
       message: "What would you like to do?",
-      options: [
-        { value: "copy-title", label: "Copy title to clipboard" },
-        { value: "copy-desc", label: "Copy description to clipboard" },
-        { value: "copy-both", label: "Copy both (formatted)" },
-        { value: "nothing", label: "Nothing, just show me" },
-      ],
+      options,
     });
 
     if (p.isCancel(action)) {
       return;
     }
 
-    if (action === "copy-title") {
+    if (action === "create-pr") {
+      await createGitHubPR(title, description, currentBranch);
+    } else if (action === "copy-title") {
       await copyToClipboard(title);
       p.note("Title copied to clipboard!", "Success");
     } else if (action === "copy-desc") {
@@ -144,5 +188,146 @@ async function copyToClipboard(text: string): Promise<void> {
   if (proc.exitCode !== 0) {
     const error = await new Response(proc.stderr).text();
     throw new Error(`Failed to copy to clipboard: ${error}`);
+  }
+}
+
+/**
+ * Create a GitHub Pull Request
+ */
+async function createGitHubPR(title: string, description: string, currentBranch: string): Promise<void> {
+  const spinner = p.spinner();
+
+  // Check if branch is pushed
+  spinner.start("Checking if branch is pushed...");
+  const isPushed = await isBranchPushed();
+
+  if (!isPushed) {
+    spinner.stop("Branch not pushed to origin");
+
+    const shouldPush = await p.confirm({
+      message: "Your branch needs to be pushed first. Push now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(shouldPush)) {
+      p.cancel("PR creation cancelled");
+      return;
+    }
+
+    if (shouldPush) {
+      spinner.start("Pushing branch to origin...");
+      try {
+        await pushToOrigin(true);
+        spinner.stop("Branch pushed successfully");
+      } catch (error) {
+        spinner.stop("Failed to push branch");
+        throw new Error(`Failed to push: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else {
+      p.note("Please push your branch first with: git push -u origin " + currentBranch, "Info");
+      return;
+    }
+  } else {
+    spinner.stop("Branch is up to date");
+  }
+
+  // Check for GitHub token
+  let githubToken = await (await import("../utils/config.ts")).getGitHubToken();
+
+  if (!githubToken) {
+    p.note(
+      "GitHub personal access token is required to create pull requests.\n" +
+      "You can create one at: https://github.com/settings/tokens\n\n" +
+      "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)",
+      "GitHub Token Required"
+    );
+
+    const token = await p.text({
+      message: "Enter your GitHub personal access token:",
+      placeholder: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      validate: (value) => {
+        if (!value || value.length === 0) return "Token is required";
+        if (!value.startsWith("ghp_") && !value.startsWith("github_pat_")) {
+          return "Token should start with 'ghp_' or 'github_pat_'";
+        }
+      },
+    });
+
+    if (p.isCancel(token)) {
+      p.cancel("PR creation cancelled");
+      return;
+    }
+
+    // Save token to config
+    spinner.start("Saving GitHub token to config...");
+    await (await import("../utils/config.ts")).updateConfig({ githubToken: token });
+    spinner.stop("GitHub token saved");
+
+    githubToken = token;
+  }
+
+  // Parse GitHub repo info
+  spinner.start("Getting repository information...");
+  const repoInfo = await parseGitHubRepo();
+
+  if (!repoInfo) {
+    spinner.stop("Failed to parse repository");
+    throw new Error("Could not parse GitHub repository information from origin URL");
+  }
+
+  const { owner, repo } = repoInfo;
+  spinner.stop(`Repository: ${owner}/${repo}`);
+
+  // Get base branch
+  const baseBranch = await getBaseBranch();
+
+  // Check if PR already exists for this branch
+  spinner.start("Checking for existing Pull Request...");
+  try {
+    const octokit = new Octokit({
+      auth: githubToken
+    });
+
+    // List open PRs with this head branch
+    const { data: prs } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${currentBranch}`,
+      state: "open",
+    });
+
+    if (prs && prs.length > 0 && prs[0]) {
+      spinner.stop("Pull Request already exists!");
+      const pr = prs[0];
+      p.note(
+        `A pull request for this branch already exists: #${pr.number}\n${pr.html_url}`,
+        "PR already exists"
+      );
+      return;
+    }
+
+    // Create PR
+    spinner.message("Creating Pull Request...");
+    const { data } = await octokit.rest.pulls.create({
+      owner,
+      repo,
+      title,
+      body: description,
+      head: currentBranch,
+      base: baseBranch,
+    });
+
+    spinner.stop("Pull Request created successfully!");
+
+    p.note(
+      `Title: ${data.title}\n` +
+      `URL: ${data.html_url}\n` +
+      `Number: #${data.number}`,
+      "Pull Request Details"
+    );
+  } catch (error: any) {
+    spinner.stop("Failed to create Pull Request");
+    const message = error.response?.data?.message || error.message || String(error);
+    throw new Error(`Could not create PR: ${message}`);
   }
 }

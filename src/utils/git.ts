@@ -180,7 +180,18 @@ export async function getBranchCommits(): Promise<GitCommit[]> {
 
   try {
     // Get commits that are in current branch but not in base branch
-    const logOutput = await $`git log ${baseBranch}..HEAD --pretty=format:%H|%s|%an|%ai`.text();
+    const formatString = "%H|%s|%an|%ai";
+    const proc = Bun.spawn(["git", "log", `${baseBranch}..HEAD`, `--pretty=format:${formatString}`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return [];
+    }
+
+    const logOutput = await new Response(proc.stdout).text();
 
     if (!logOutput.trim()) {
       return [];
@@ -215,25 +226,31 @@ export async function getBranchInfo(): Promise<GitBranchInfo> {
 }
 
 /**
- * Check if there are any unstaged changes
+ * Check if there are any unstaged changes or uncommitted changes
  */
 export async function hasUnstagedChanges(): Promise<boolean> {
   try {
     const status = await $`git status --porcelain`.text();
-    if (!status.trim()) {
+    // Don't trim! The format is position-sensitive
+    if (!status) {
       return false;
     }
-    // Check for lines that start with ' M', ' D', '??', etc. (not staged)
-    const lines = status.trim().split("\n").filter(Boolean);
+    const lines = status.split("\n").filter(Boolean);
     return lines.some((line) => {
       if (line.length < 2) return false;
-      const first = line[0];
-      const second = line[1];
+      const indexStatus = line[0];   // X in XY format
+      const workTreeStatus = line[1]; // Y in XY format
       // Line format: XY filename
       // X = index status, Y = working tree status
-      // If Y is not space, there are unstaged changes
-      // Also check for untracked files (??)
-      return (second !== " " && second !== undefined) || line.startsWith("??");
+      // Return true if:
+      // 1. Working tree has changes (Y is not space)
+      // 2. Index has staged changes (X is not space and not ?)
+      // 3. Untracked files (??)
+      return (
+        line.startsWith("??") || // Untracked files
+        (workTreeStatus !== " " && workTreeStatus !== undefined) || // Unstaged changes
+        (indexStatus !== " " && indexStatus !== "?") // Staged but uncommitted changes
+      );
     });
   } catch {
     return false;
@@ -299,5 +316,63 @@ export async function pushToOrigin(setUpstream: boolean = true): Promise<void> {
     await $`git push -u origin ${currentBranch}`;
   } else {
     await $`git push origin ${currentBranch}`;
+  }
+}
+
+/**
+ * Check if current branch is pushed to origin
+ */
+export async function isBranchPushed(): Promise<boolean> {
+  try {
+    const currentBranch = await getCurrentBranch();
+    // Check if the branch exists on the remote
+    const result = await $`git ls-remote --heads origin ${currentBranch}`.text();
+    if (!result.trim()) {
+      return false;
+    }
+    // Check if local and remote are in sync
+    const localCommit = await $`git rev-parse HEAD`.text();
+    const remoteCommit = await $`git rev-parse origin/${currentBranch}`.text();
+    return localCommit.trim() === remoteCommit.trim();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if origin is a GitHub repository
+ */
+export async function isGitHubRepository(): Promise<boolean> {
+  try {
+    const url = await getOriginUrl();
+    if (!url) return false;
+    return url.includes("github.com");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parse GitHub owner and repo from origin URL
+ */
+export async function parseGitHubRepo(): Promise<{ owner: string; repo: string } | null> {
+  try {
+    const url = await getOriginUrl();
+    if (!url) return null;
+
+    // Handle both HTTPS and SSH URLs
+    // HTTPS: https://github.com/owner/repo.git
+    // SSH: git@github.com:owner/repo.git
+    let match = url.match(/github\.com[:/]([^/]+)\/(.+?)(?:\.git)?$/);
+
+    if (match && match[1] && match[2]) {
+      return {
+        owner: match[1],
+        repo: match[2],
+      };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
