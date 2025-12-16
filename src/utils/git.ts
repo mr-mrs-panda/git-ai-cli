@@ -301,3 +301,61 @@ export async function pushToOrigin(setUpstream: boolean = true): Promise<void> {
     await $`git push origin ${currentBranch}`;
   }
 }
+
+/**
+ * Check if current branch is pushed to origin
+ */
+export async function isBranchPushed(): Promise<boolean> {
+  try {
+    const currentBranch = await getCurrentBranch();
+    // Check if the branch exists on the remote
+    const result = await $`git ls-remote --heads origin ${currentBranch}`.text();
+    if (!result.trim()) {
+      return false;
+    }
+    // Check if local and remote are in sync
+    const localCommit = await $`git rev-parse HEAD`.text();
+    const remoteCommit = await $`git rev-parse origin/${currentBranch}`.text();
+    return localCommit.trim() === remoteCommit.trim();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if origin is a GitHub repository
+ */
+export async function isGitHubRepository(): Promise<boolean> {
+  try {
+    const url = await getOriginUrl();
+    if (!url) return false;
+    return url.includes("github.com");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parse GitHub owner and repo from origin URL
+ */
+export async function parseGitHubRepo(): Promise<{ owner: string; repo: string } | null> {
+  try {
+    const url = await getOriginUrl();
+    if (!url) return null;
+
+    // Handle both HTTPS and SSH URLs
+    // HTTPS: https://github.com/owner/repo.git
+    // SSH: git@github.com:owner/repo.git
+    let match = url.match(/github\.com[:/]([^/]+)\/(.+?)(?:\.git)?$/);
+
+    if (match && match[1] && match[2]) {
+      return {
+        owner: match[1],
+        repo: match[2],
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
