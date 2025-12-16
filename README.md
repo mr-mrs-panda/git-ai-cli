@@ -77,7 +77,6 @@ This allows you to:
 | `model` | AI model to use | `gpt-5.2` | See available models below |
 | `reasoningEffort` | Reasoning depth | `low` | `none`, `low`, `medium`, `high`, `xhigh` |
 | `temperature` | Creativity vs consistency | `0.7` | `0.0` - `2.0` |
-| `maxTokens` | Response length limit | `500` | `1` - `4000` |
 | `openaiApiKey` | Your OpenAI API key | - | `sk-...` |
 
 ### Available Models

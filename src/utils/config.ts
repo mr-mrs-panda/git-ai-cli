@@ -12,7 +12,7 @@ export interface Config {
 
 const DEFAULT_CONFIG: Config = {
   model: "gpt-5.2",
-  temperature: 0.7,
+  temperature: 1,
   reasoningEffort: "low",
 };
 

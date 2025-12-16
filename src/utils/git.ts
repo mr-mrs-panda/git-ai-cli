@@ -253,3 +253,46 @@ export async function isGitRepository(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Check if remote 'origin' exists
+ */
+export async function hasOriginRemote(): Promise<boolean> {
+  try {
+    const remotes = await $`git remote`.text();
+    return remotes.trim().split("\n").includes("origin");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get the current remote URL for origin (if it exists)
+ */
+export async function getOriginUrl(): Promise<string | null> {
+  try {
+    const url = await $`git remote get-url origin`.text();
+    return url.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Add origin remote
+ */
+export async function addOriginRemote(url: string): Promise<void> {
+  await $`git remote add origin ${url}`;
+}
+
+/**
+ * Push current branch to origin
+ */
+export async function pushToOrigin(setUpstream: boolean = true): Promise<void> {
+  const currentBranch = await getCurrentBranch();
+  if (setUpstream) {
+    await $`git push -u origin ${currentBranch}`;
+  } else {
+    await $`git push origin ${currentBranch}`;
+  }
+}

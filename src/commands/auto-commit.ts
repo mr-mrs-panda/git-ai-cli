@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { getStagedChanges, isGitRepository, hasUnstagedChanges, stageAllChanges } from "../utils/git.ts";
+import { getStagedChanges, isGitRepository, hasUnstagedChanges, stageAllChanges, hasOriginRemote, addOriginRemote, pushToOrigin } from "../utils/git.ts";
 import { generateCommitMessage } from "../utils/openai.ts";
 
 export async function autoCommit(): Promise<void> {
@@ -125,6 +125,65 @@ export async function autoCommit(): Promise<void> {
 
       if (proc.exitCode === 0) {
         spinner.stop("Commit created successfully!");
+
+        // Ask if user wants to push
+        const shouldPush = await p.confirm({
+          message: "Do you want to push this commit?",
+          initialValue: false,
+        });
+
+        if (p.isCancel(shouldPush)) {
+          p.note("Commit created but not pushed.", "Done");
+          return;
+        }
+
+        if (shouldPush) {
+          spinner.start("Checking remote configuration...");
+          const hasOrigin = await hasOriginRemote();
+
+          if (!hasOrigin) {
+            spinner.stop("No origin remote found");
+
+            const remoteUrl = await p.text({
+              message: "Enter the remote repository URL:",
+              placeholder: "https://github.com/username/repo.git",
+              validate: (value) => {
+                if (!value) return "URL is required";
+                if (!value.includes("github.com") && !value.includes("gitlab.com") && !value.includes("bitbucket.org") && !value.startsWith("git@")) {
+                  return "Please enter a valid git repository URL";
+                }
+              },
+            });
+
+            if (p.isCancel(remoteUrl)) {
+              p.note("Commit created but not pushed.", "Done");
+              return;
+            }
+
+            spinner.start("Adding origin remote...");
+            try {
+              await addOriginRemote(remoteUrl);
+              spinner.stop("Origin remote added");
+            } catch (error) {
+              spinner.stop("Failed to add remote");
+              throw new Error(`Failed to add origin remote: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          } else {
+            spinner.stop("Origin remote exists");
+          }
+
+          // Push to origin
+          spinner.start("Pushing to origin...");
+          try {
+            await pushToOrigin(true);
+            spinner.stop("Successfully pushed to origin!");
+          } catch (error) {
+            spinner.stop("Push failed");
+            throw new Error(`Failed to push: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        } else {
+          p.note("Commit created but not pushed.", "Done");
+        }
       } else {
         const error = await new Response(proc.stderr).text();
         spinner.stop("Commit failed");
