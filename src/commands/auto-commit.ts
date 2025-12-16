@@ -172,7 +172,6 @@ export async function autoCommit(): Promise<void> {
             spinner.stop("Origin remote exists");
           }
 
-          // Push to origin
           spinner.start("Pushing to origin...");
           try {
             await pushToOrigin(true);
