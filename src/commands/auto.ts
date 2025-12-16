@@ -8,6 +8,14 @@ import { getGitHubToken, updateConfig } from "../utils/config.ts";
 import { parseGitHubRepo } from "../utils/git.ts";
 import { Octokit } from "octokit";
 
+export interface AutoOptions {
+  /**
+   * Auto-accept all prompts (blind mode)
+   * @default false
+   */
+  autoYes?: boolean;
+}
+
 /**
  * Auto mode - Intelligent workflow that determines what needs to be done
  *
@@ -17,7 +25,8 @@ import { Octokit } from "octokit";
  * 3. Push to origin
  * 4. Create PR (if GitHub repo)
  */
-export async function auto(): Promise<void> {
+export async function auto(options: AutoOptions = {}): Promise<void> {
+  const { autoYes = false } = options;
   const spinner = p.spinner();
 
   // Check if we're in a git repository
@@ -68,14 +77,22 @@ export async function auto(): Promise<void> {
       "Suggested Branch"
     );
 
-    const shouldCreateBranch = await p.confirm({
-      message: `Create branch '${branchSuggestion.name}'?`,
-      initialValue: true,
-    });
+    let shouldCreateBranch = true;
 
-    if (p.isCancel(shouldCreateBranch) || !shouldCreateBranch) {
-      p.cancel("Auto mode cancelled");
-      return;
+    if (!autoYes) {
+      const response = await p.confirm({
+        message: `Create branch '${branchSuggestion.name}'?`,
+        initialValue: true,
+      });
+
+      if (p.isCancel(response) || !response) {
+        p.cancel("Auto mode cancelled");
+        return;
+      }
+
+      shouldCreateBranch = response;
+    } else {
+      p.log.info(`Auto-accepting: Creating branch '${branchSuggestion.name}'`);
     }
 
     spinner.start(`Creating branch '${branchSuggestion.name}'...`);
@@ -101,7 +118,7 @@ export async function auto(): Promise<void> {
   p.log.step("Step 2: Generating commit with AI");
 
   const commitMessage = await generateAndCommit({
-    confirmBeforeCommit: true,
+    confirmBeforeCommit: !autoYes,
   });
 
   if (!commitMessage) {
@@ -115,14 +132,22 @@ export async function auto(): Promise<void> {
   const isPushed = await isBranchPushed();
 
   if (!isPushed) {
-    const shouldPush = await p.confirm({
-      message: "Push branch to origin?",
-      initialValue: true,
-    });
+    let shouldPush = autoYes;
 
-    if (p.isCancel(shouldPush)) {
-      p.note("Branch not pushed. You can push manually later.", "Done");
-      return;
+    if (!autoYes) {
+      const response = await p.confirm({
+        message: "Push branch to origin?",
+        initialValue: true,
+      });
+
+      if (p.isCancel(response)) {
+        p.note("Branch not pushed. You can push manually later.", "Done");
+        return;
+      }
+
+      shouldPush = response;
+    } else {
+      p.log.info("Auto-accepting: Pushing branch to origin");
     }
 
     if (shouldPush) {
@@ -152,12 +177,25 @@ export async function auto(): Promise<void> {
 
   p.log.step("Step 4: Creating Pull Request");
 
-  const shouldCreatePR = await p.confirm({
-    message: "Create GitHub Pull Request?",
-    initialValue: true,
-  });
+  let shouldCreatePR = autoYes;
 
-  if (p.isCancel(shouldCreatePR) || !shouldCreatePR) {
+  if (!autoYes) {
+    const response = await p.confirm({
+      message: "Create GitHub Pull Request?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(response) || !response) {
+      p.note("PR not created. You can create it manually later.", "Done");
+      return;
+    }
+
+    shouldCreatePR = response;
+  } else {
+    p.log.info("Auto-accepting: Creating GitHub Pull Request");
+  }
+
+  if (!shouldCreatePR) {
     p.note("PR not created. You can create it manually later.", "Done");
     return;
   }
@@ -185,20 +223,33 @@ export async function auto(): Promise<void> {
   p.note(title, "PR Title");
   p.note(description, "PR Description");
 
-  const confirmPR = await p.confirm({
-    message: "Create PR with this title and description?",
-    initialValue: true,
-  });
+  if (!autoYes) {
+    const confirmPR = await p.confirm({
+      message: "Create PR with this title and description?",
+      initialValue: true,
+    });
 
-  if (p.isCancel(confirmPR) || !confirmPR) {
-    p.note("PR not created.", "Cancelled");
-    return;
+    if (p.isCancel(confirmPR) || !confirmPR) {
+      p.note("PR not created.", "Cancelled");
+      return;
+    }
+  } else {
+    p.log.info("Auto-accepting: Creating PR with generated title and description");
   }
 
   // Check for GitHub token
   let githubToken = await getGitHubToken();
 
   if (!githubToken) {
+    if (autoYes) {
+      p.note(
+        "GitHub personal access token is required to create pull requests.\n" +
+        "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
+        "GitHub Token Missing"
+      );
+      return;
+    }
+
     p.note(
       "GitHub personal access token is required to create pull requests.\n" +
       "You can create one at: https://github.com/settings/tokens\n\n" +

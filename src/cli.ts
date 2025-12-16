@@ -26,10 +26,12 @@ Commands:
 Options:
   -h, --help     Show this help message
   -v, --version  Show version
+  -y, --yes      Auto-accept all prompts (blind mode)
 
 Examples:
   git-ai                 # Interactive mode
   git-ai auto            # Smart workflow (recommended for quick changes)
+  git-ai auto -y         # Auto mode with all prompts auto-accepted
   git-ai create-branch   # Create branch from changes
   git-ai auto-commit     # Generate commit message
   git-ai pr-suggest      # Generate PR suggestion
@@ -150,11 +152,17 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // Check for yes flag
+  const yesFlag = args.includes("-y") || args.includes("--yes");
+
+  // Filter out flags to get the command
+  const commandArgs = args.filter((arg) => !arg.startsWith("-"));
+
   let action: string;
 
   // Direct command mode or interactive mode
-  if (args.length > 0) {
-    action = args[0] as string;
+  if (commandArgs.length > 0) {
+    action = commandArgs[0] as string;
 
     // Validate command
     if (!["auto", "create-branch", "auto-commit", "pr-suggest", "settings"].includes(action)) {
@@ -175,7 +183,7 @@ async function main(): Promise<void> {
   // Execute the command
   try {
     if (action === "auto") {
-      await auto();
+      await auto({ autoYes: yesFlag });
     } else if (action === "create-branch") {
       await createBranch();
     } else if (action === "auto-commit") {

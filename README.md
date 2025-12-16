@@ -153,6 +153,7 @@ git-ai
 Run specific commands directly:
 ```bash
 git-ai auto            # Smart workflow (recommended)
+git-ai auto -y         # Auto mode with all prompts auto-accepted (blind mode)
 git-ai create-branch   # Create branch from changes
 git-ai auto-commit     # Generate commit message
 git-ai pr-suggest      # Generate PR suggestion
@@ -169,6 +170,10 @@ The intelligent workflow that handles everything for you:
 # Make your changes
 # Run auto mode - it figures out what to do
 git-ai auto
+
+# Or use blind mode to auto-accept all prompts
+git-ai auto -y
+git-ai auto --yes
 ```
 
 **What it does:**
@@ -177,6 +182,12 @@ git-ai auto
 3. Generates and commits with AI
 4. Pushes to origin
 5. Creates a GitHub Pull Request
+
+**Blind Mode (`-y` or `--yes` flag):**
+- Auto-accepts all prompts without user confirmation
+- Perfect for CI/CD pipelines or when you trust the AI completely
+- Still shows all generated content (branch names, commit messages, PR descriptions)
+- Skips PR creation if GitHub token is not configured
 
 Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
 
