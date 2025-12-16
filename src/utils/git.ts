@@ -220,15 +220,20 @@ export async function getBranchInfo(): Promise<GitBranchInfo> {
 export async function hasUnstagedChanges(): Promise<boolean> {
   try {
     const status = await $`git status --porcelain`.text();
+    if (!status.trim()) {
+      return false;
+    }
     // Check for lines that start with ' M', ' D', '??', etc. (not staged)
     const lines = status.trim().split("\n").filter(Boolean);
     return lines.some((line) => {
+      if (line.length < 2) return false;
       const first = line[0];
       const second = line[1];
       // Line format: XY filename
       // X = index status, Y = working tree status
       // If Y is not space, there are unstaged changes
-      return second !== " " && second !== undefined;
+      // Also check for untracked files (??)
+      return (second !== " " && second !== undefined) || line.startsWith("??");
     });
   } catch {
     return false;

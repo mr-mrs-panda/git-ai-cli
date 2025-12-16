@@ -105,7 +105,7 @@ export async function autoCommit(): Promise<void> {
     // Ask if user wants to use it
     const shouldCommit = await p.confirm({
       message: "Do you want to commit with this message?",
-      initialValue: false,
+      initialValue: true,
     });
 
     if (p.isCancel(shouldCommit)) {
@@ -129,7 +129,7 @@ export async function autoCommit(): Promise<void> {
         // Ask if user wants to push
         const shouldPush = await p.confirm({
           message: "Do you want to push this commit?",
-          initialValue: false,
+          initialValue: true,
         });
 
         if (p.isCancel(shouldPush)) {
