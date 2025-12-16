@@ -1,5 +1,9 @@
 # Git AI CLI
 
+[![CI](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/ci.yml)
+[![Release](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/release.yml/badge.svg)](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/release.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 AI-powered Git commit message generator and PR suggestion tool built with Bun.
 
 ## Features
@@ -186,13 +190,29 @@ git add .
 git-ai auto-commit
 ```
 
+#### Create Branch
+Analyzes your changes and creates a new branch with an AI-generated name:
+```bash
+# Make some changes (staged or unstaged)
+# Run the tool and select "Create branch from changes"
+git-ai create-branch
+```
+
+The tool will:
+1. Analyze your changes
+2. Suggest a branch name like `feature/add-authentication` or `bugfix/fix-login-error`
+3. Create and switch to the new branch
+4. Keep your changes staged
+
 #### PR Suggestion
 Generates PR title and description from your branch commits:
 ```bash
 # Make sure you're on a feature branch with commits
 # Run the tool and select "Generate PR title & description"
-git-ai
+git-ai pr-suggest
 ```
+
+The tool can also create the GitHub PR directly if you have a `GITHUB_TOKEN` configured.
 
 ## Development
 
