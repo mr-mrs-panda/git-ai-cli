@@ -312,10 +312,20 @@ export async function addOriginRemote(url: string): Promise<void> {
  */
 export async function pushToOrigin(setUpstream: boolean = true): Promise<void> {
   const currentBranch = await getCurrentBranch();
-  if (setUpstream) {
-    await $`git push -u origin ${currentBranch}`;
-  } else {
-    await $`git push origin ${currentBranch}`;
+  const args = setUpstream
+    ? ["git", "push", "-u", "origin", currentBranch]
+    : ["git", "push", "origin", currentBranch];
+
+  const proc = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to push to origin");
   }
 }
 
