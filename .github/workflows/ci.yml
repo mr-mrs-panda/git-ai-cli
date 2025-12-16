@@ -36,9 +36,9 @@ jobs:
 
       - name: Check build artifact
         run: |
-          if [ -f "./git-ai" ]; then
+          if [ -f "./git-ai" ] || [ -f "./git-ai.exe" ]; then
             echo "Build successful - git-ai binary created"
-            ls -lh ./git-ai
+            ls -lh ./git-ai* || true
           else
             echo "Build failed - no binary found"
             exit 1
@@ -49,7 +49,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: git-ai-${{ matrix.os }}
-          path: ./git-ai
+          path: |
+            ./git-ai
+            ./git-ai.exe
           if-no-files-found: error
 
   lint:
