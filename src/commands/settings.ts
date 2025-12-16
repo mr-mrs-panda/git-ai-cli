@@ -26,9 +26,9 @@ async function showCurrentConfig(): Promise<void> {
 
   p.note(
     `  Model: ${config.model || "gpt-5.2"}\n` +
-      `  Reasoning Effort: ${config.reasoningEffort || "low"}\n` +
-      `  Temperature: ${config.temperature || 0.7}\n` +
-      `  API Key: ${config.openaiApiKey ? "***" + config.openaiApiKey.slice(-4) : "Not set"}`,
+    `  Reasoning Effort: ${config.reasoningEffort || "low"}\n` +
+    `  Temperature: ${config.temperature || 1}\n` +
+    `  API Key: ${config.openaiApiKey ? "***" + config.openaiApiKey.slice(-4) : "Not set"}`,
     "Current Settings"
   );
 }
@@ -94,7 +94,7 @@ export async function settings(): Promise<void> {
         if (reasoning === "xhigh" && !config.model?.includes("pro")) {
           p.note(
             "Warning: 'xhigh' reasoning is designed for GPT-5.2 Pro.\n" +
-              "Other models may not support this level.",
+            "Other models may not support this level.",
             "Compatibility Notice"
           );
         }
@@ -104,8 +104,8 @@ export async function settings(): Promise<void> {
       case "temperature": {
         const temperature = await p.text({
           message: "Enter temperature (0.0 - 2.0):",
-          placeholder: "0.7",
-          initialValue: String(config.temperature || 0.7),
+          placeholder: "1",
+          initialValue: String(config.temperature || 1),
           validate: (value) => {
             const num = parseFloat(value);
             if (isNaN(num)) return "Must be a number";
@@ -142,7 +142,7 @@ export async function settings(): Promise<void> {
       case "view": {
         p.note(
           `Config file location:\n${getConfigLocation()}\n\n` +
-            `You can edit this file directly with your favorite editor.`,
+          `You can edit this file directly with your favorite editor.`,
           "Configuration File"
         );
         continue;
@@ -161,7 +161,7 @@ export async function settings(): Promise<void> {
         await updateConfig({
           openaiApiKey: config.openaiApiKey, // Keep API key
           model: "gpt-5.2",
-          temperature: 0.7,
+          temperature: 1,
           reasoningEffort: "low",
         });
 

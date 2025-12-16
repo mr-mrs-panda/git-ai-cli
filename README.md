@@ -50,7 +50,7 @@ Configuration is stored in `~/.config/git-ai/config.json`:
 {
   "openaiApiKey": "sk-your-api-key-here",
   "model": "gpt-5.2",
-  "temperature": 0.7,
+  "temperature": 1,
   "reasoningEffort": "low"
 }
 ```
@@ -76,7 +76,7 @@ This allows you to:
 |--------|-------------|---------|---------------|
 | `model` | AI model to use | `gpt-5.2` | See available models below |
 | `reasoningEffort` | Reasoning depth | `low` | `none`, `low`, `medium`, `high`, `xhigh` |
-| `temperature` | Creativity vs consistency | `0.7` | `0.0` - `2.0` |
+| `temperature` | Creativity vs consistency | `1` | `0.0` - `2.0` |
 | `openaiApiKey` | Your OpenAI API key | - | `sk-...` |
 
 ### Available Models

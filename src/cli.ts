@@ -3,6 +3,7 @@
 import * as p from "@clack/prompts";
 import { autoCommit } from "./commands/auto-commit.ts";
 import { prSuggest } from "./commands/pr-suggest.ts";
+import { createBranch } from "./commands/create-branch.ts";
 import { settings } from "./commands/settings.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
 
@@ -15,6 +16,7 @@ Usage:
 
 Commands:
   auto-commit    Generate AI-powered commit message from staged changes
+  create-branch  Analyze changes and suggest a branch name
   pr-suggest     Generate PR title and description from branch commits
   settings       Configure AI model, reasoning effort, and other settings
   help           Show this help message
@@ -26,6 +28,7 @@ Options:
 Examples:
   git-ai                 # Interactive mode
   git-ai auto-commit     # Generate commit message
+  git-ai create-branch   # Create branch from changes
   git-ai pr-suggest      # Generate PR suggestion
   git-ai settings        # Configure settings
 
@@ -99,6 +102,11 @@ async function runInteractive(): Promise<string> {
         hint: "Analyze staged changes and suggest a commit message",
       },
       {
+        value: "create-branch",
+        label: "Create branch from changes",
+        hint: "Analyze changes and suggest a branch name",
+      },
+      {
         value: "pr-suggest",
         label: "Generate PR title & description",
         hint: "Based on branch commits and branch name",
@@ -141,7 +149,7 @@ async function main(): Promise<void> {
     action = args[0] as string;
 
     // Validate command
-    if (!["auto-commit", "pr-suggest", "settings"].includes(action)) {
+    if (!["auto-commit", "create-branch", "pr-suggest", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -160,6 +168,8 @@ async function main(): Promise<void> {
   try {
     if (action === "auto-commit") {
       await autoCommit();
+    } else if (action === "create-branch") {
+      await createBranch();
     } else if (action === "pr-suggest") {
       await prSuggest();
     } else if (action === "settings") {
