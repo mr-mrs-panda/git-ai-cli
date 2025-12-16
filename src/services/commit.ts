@@ -93,21 +93,38 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
     }
 
     // Execute the commit
+    // For multi-line messages (with body/footer), use a temporary file
     spinner.start("Creating commit...");
-    const proc = Bun.spawn(["git", "commit", "-m", commitMessage], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
 
-    await proc.exited;
+    // Create a temporary file for the commit message
+    const tmpDir = "/tmp";
+    const tmpFile = `${tmpDir}/git-ai-commit-${Date.now()}.txt`;
 
-    if (proc.exitCode !== 0) {
-      const error = await new Response(proc.stderr).text();
-      spinner.stop("Commit failed");
-      throw new Error(error || "Failed to create commit");
+    try {
+      await Bun.write(tmpFile, commitMessage);
+
+      const proc = Bun.spawn(["git", "commit", "-F", tmpFile], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      await proc.exited;
+
+      if (proc.exitCode !== 0) {
+        const error = await new Response(proc.stderr).text();
+        spinner.stop("Commit failed");
+        throw new Error(error || "Failed to create commit");
+      }
+
+      spinner.stop("Commit created successfully");
+    } finally {
+      // Clean up temp file
+      try {
+        await Bun.spawn(["rm", "-f", tmpFile]).exited;
+      } catch {
+        // Ignore cleanup errors
+      }
     }
-
-    spinner.stop("Commit created successfully");
 
     return commitMessage;
   } finally {

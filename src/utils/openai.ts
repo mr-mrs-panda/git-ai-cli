@@ -46,22 +46,55 @@ export async function generateCommitMessage(
     ? `\nBranch name: ${branchName}\nConsider the branch name context when writing the commit message.\n`
     : '';
 
-  const prompt = `You are an expert at writing concise, meaningful git commit messages following conventional commit standards.
+  const prompt = `You are an expert at writing meaningful git commit messages following Conventional Commits specification.
 
-Analyze the following git changes and generate a commit message.
+Analyze the following git changes and generate a commit message with header, body, and footer.
 ${branchContext}
-Rules:
-- Use conventional commit format: <type>(<scope>): <description>
-- Types: feat, fix, docs, style, refactor, test, chore
-- Keep the first line under 72 characters
-- Be specific and descriptive
-- Focus on the "why" and "what", not the "how"
-- If a branch name is provided, ensure the commit message aligns with the branch's purpose
+STRUCTURE:
+A commit message consists of three parts separated by blank lines:
+
+1. HEADER (required): <type>[optional scope]: <description>
+   - Types: feat, fix, docs, style, refactor, perf, test, chore
+   - Keep under 72 characters
+   - Use imperative mood ("add feature" not "added feature")
+
+2. BODY (optional but recommended for non-trivial changes):
+   - Explain the "why" and "what", not the "how"
+   - Provide context and motivation for the change
+   - Can be multiple paragraphs
+   - Wrap at 72 characters per line
+
+3. FOOTER (optional):
+   - Reference issues: "Fixes #123" or "Closes #456"
+   - Breaking changes: "BREAKING CHANGE: description"
+   - Other metadata
+
+EXAMPLES:
+
+Simple commit (header only):
+fix(auth): correct typo in login validation
+
+Commit with body:
+feat(api): add user profile endpoint
+
+This endpoint allows clients to fetch user profile data including
+avatar, bio, and social links. It supports optional query parameters
+for filtering returned fields.
+
+Commit with body and footer:
+refactor(database): migrate from SQL to NoSQL
+
+The application now uses MongoDB instead of PostgreSQL to better handle
+unstructured user data and improve horizontal scaling capabilities.
+The migration maintains backward compatibility with existing data.
+
+BREAKING CHANGE: Database connection configuration format has changed
+Closes #234
 
 Git changes:
 ${changesText}
 
-Generate ONLY the commit message, nothing else.`;
+IMPORTANT: Generate ONLY the commit message. If the changes are simple, a header-only commit is fine. For significant changes, include a body explaining why the change was needed.`;
 
   const response = await client.chat.completions.create({
     model: config.model || "gpt-5.2",
