@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 
 import * as p from "@clack/prompts";
+import { auto } from "./commands/auto.ts";
+import { createBranch } from "./commands/create-branch.ts";
 import { autoCommit } from "./commands/auto-commit.ts";
 import { prSuggest } from "./commands/pr-suggest.ts";
-import { createBranch } from "./commands/create-branch.ts";
 import { settings } from "./commands/settings.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
 
@@ -15,8 +16,9 @@ Usage:
   git-ai [command]
 
 Commands:
-  auto-commit    Generate AI-powered commit message from staged changes
+  auto           Smart workflow: branch → commit → push → PR (recommended)
   create-branch  Analyze changes and suggest a branch name
+  auto-commit    Generate AI-powered commit message from staged changes
   pr-suggest     Generate PR title and description from branch commits
   settings       Configure AI model, reasoning effort, and other settings
   help           Show this help message
@@ -27,8 +29,9 @@ Options:
 
 Examples:
   git-ai                 # Interactive mode
-  git-ai auto-commit     # Generate commit message
+  git-ai auto            # Smart workflow (recommended for quick changes)
   git-ai create-branch   # Create branch from changes
+  git-ai auto-commit     # Generate commit message
   git-ai pr-suggest      # Generate PR suggestion
   git-ai settings        # Configure settings
 
@@ -97,14 +100,19 @@ async function runInteractive(): Promise<string> {
     message: "What would you like to do?",
     options: [
       {
-        value: "auto-commit",
-        label: "Generate commit message",
-        hint: "Analyze staged changes and suggest a commit message",
+        value: "auto",
+        label: "🚀 Auto Mode (Recommended)",
+        hint: "Smart workflow: branch → commit → push → PR",
       },
       {
         value: "create-branch",
         label: "Create branch from changes",
         hint: "Analyze changes and suggest a branch name",
+      },
+      {
+        value: "auto-commit",
+        label: "Generate commit message",
+        hint: "Analyze staged changes and suggest a commit message",
       },
       {
         value: "pr-suggest",
@@ -149,7 +157,7 @@ async function main(): Promise<void> {
     action = args[0] as string;
 
     // Validate command
-    if (!["auto-commit", "create-branch", "pr-suggest", "settings"].includes(action)) {
+    if (!["auto", "create-branch", "auto-commit", "pr-suggest", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -166,10 +174,12 @@ async function main(): Promise<void> {
 
   // Execute the command
   try {
-    if (action === "auto-commit") {
-      await autoCommit();
+    if (action === "auto") {
+      await auto();
     } else if (action === "create-branch") {
       await createBranch();
+    } else if (action === "auto-commit") {
+      await autoCommit();
     } else if (action === "pr-suggest") {
       await prSuggest();
     } else if (action === "settings") {
