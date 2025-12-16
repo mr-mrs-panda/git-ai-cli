@@ -4,10 +4,39 @@ import { getBranchInfo, isGitRepository, isGitHubRepository, parseGitHubRepo, is
 import { generatePRSuggestion } from "../utils/openai.ts";
 
 export async function prSuggest(): Promise<void> {
+
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
   if (!isRepo) {
     throw new Error("Not a git repository. Please run this command in a git repository.");
+  }
+
+  // Check for unstaged/uncommitted changes
+  const hasUnstaged = await (await import("../utils/git.ts")).hasUnstagedChanges();
+  if (hasUnstaged) {
+    const shouldCommit = await p.confirm({
+      message: "You have unstaged or uncommitted changes. Would you like to commit them with AI?",
+      initialValue: true,
+    });
+    if (p.isCancel(shouldCommit)) {
+      p.cancel("PR suggestion cancelled");
+      return;
+    }
+    if (!shouldCommit) {
+      p.note("Please commit and push your changes before creating a PR.", "Info");
+      return;
+    }
+
+    // Use the AI-powered commit service
+    const { generateAndCommit } = await import("../services/commit.ts");
+    const commitMessage = await generateAndCommit({
+      confirmBeforeCommit: true,
+    });
+
+    if (!commitMessage) {
+      p.cancel("PR suggestion cancelled");
+      return;
+    }
   }
 
   const spinner = p.spinner();
@@ -232,14 +261,33 @@ async function createGitHubPR(title: string, description: string, currentBranch:
   // Get base branch
   const baseBranch = await getBaseBranch();
 
-  // Create PR
-  spinner.start("Creating Pull Request...");
-
+  // Check if PR already exists for this branch
+  spinner.start("Checking for existing Pull Request...");
   try {
     const octokit = new Octokit({
       auth: githubToken
     });
 
+    // List open PRs with this head branch
+    const { data: prs } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${currentBranch}`,
+      state: "open",
+    });
+
+    if (prs && prs.length > 0 && prs[0]) {
+      spinner.stop("Pull Request already exists!");
+      const pr = prs[0];
+      p.note(
+        `A pull request for this branch already exists: #${pr.number}\n${pr.html_url}`,
+        "PR already exists"
+      );
+      return;
+    }
+
+    // Create PR
+    spinner.start("Creating Pull Request...");
     const { data } = await octokit.rest.pulls.create({
       owner,
       repo,
