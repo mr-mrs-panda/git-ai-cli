@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges } from "../utils/git.ts";
 import { analyzeBranchName } from "../services/branch.ts";
 import { generateAndCommit } from "../services/commit.ts";
-import { getBranchInfo, pushToOrigin, isBranchPushed, isGitHubRepository } from "../utils/git.ts";
+import { getBranchInfo, pushToOrigin, isBranchPushed, isGitHubRepository, prExistsForBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
 import { getGitHubToken, updateConfig } from "../utils/config.ts";
 import { parseGitHubRepo } from "../utils/git.ts";
@@ -14,6 +14,155 @@ export interface AutoOptions {
    * @default false
    */
   autoYes?: boolean;
+}
+
+/**
+ * Helper function to create a PR for the current branch
+ */
+async function createPullRequest(
+  workingBranch: string,
+  baseBranch: string,
+  spinner: ReturnType<typeof p.spinner>,
+  autoYes: boolean
+): Promise<void> {
+  // Get branch info for PR
+  spinner.start("Analyzing commits for PR...");
+  const branchInfo = await getBranchInfo();
+
+  if (branchInfo.commits.length === 0) {
+    spinner.stop("No commits found");
+    p.note("No commits to create PR from.", "Info");
+    return;
+  }
+
+  spinner.stop(`Found ${branchInfo.commits.length} commit(s)`);
+
+  // Generate PR title and description
+  spinner.start("Generating PR title and description with AI...");
+  const { title, description } = await generatePRSuggestion(
+    workingBranch,
+    branchInfo.commits.map((c) => ({ message: c.message }))
+  );
+  spinner.stop("PR suggestion generated");
+
+  p.note(title, "PR Title");
+  p.note(description, "PR Description");
+
+  if (!autoYes) {
+    const confirmPR = await p.confirm({
+      message: "Create PR with this title and description?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(confirmPR) || !confirmPR) {
+      p.note("PR not created.", "Cancelled");
+      return;
+    }
+  } else {
+    p.log.info("Auto-accepting: Creating PR with generated title and description");
+  }
+
+  // Check for GitHub token
+  let githubToken = await getGitHubToken();
+
+  if (!githubToken) {
+    if (autoYes) {
+      p.note(
+        "GitHub personal access token is required to create pull requests.\n" +
+        "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
+        "GitHub Token Missing"
+      );
+      return;
+    }
+
+    p.note(
+      "GitHub personal access token is required to create pull requests.\n" +
+      "You can create one at: https://github.com/settings/tokens\n\n" +
+      "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)",
+      "GitHub Token Required"
+    );
+
+    const token = await p.text({
+      message: "Enter your GitHub personal access token:",
+      placeholder: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      validate: (value) => {
+        if (!value || value.length === 0) return "Token is required";
+        if (!value.startsWith("ghp_") && !value.startsWith("github_pat_")) {
+          return "Token should start with 'ghp_' or 'github_pat_'";
+        }
+      },
+    });
+
+    if (p.isCancel(token)) {
+      p.cancel("PR creation cancelled");
+      return;
+    }
+
+    spinner.start("Saving GitHub token...");
+    await updateConfig({ githubToken: token });
+    spinner.stop("GitHub token saved");
+
+    githubToken = token;
+  }
+
+  // Get repo info
+  spinner.start("Getting repository information...");
+  const repoInfo = await parseGitHubRepo();
+
+  if (!repoInfo) {
+    spinner.stop("Failed to parse repository");
+    throw new Error("Could not parse GitHub repository information");
+  }
+
+  const { owner, repo } = repoInfo;
+  spinner.stop(`Repository: ${owner}/${repo}`);
+
+  // Create PR
+  spinner.start("Creating Pull Request...");
+  try {
+    const octokit = new Octokit({ auth: githubToken });
+
+    // Check if PR already exists
+    const { data: existingPRs } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${workingBranch}`,
+      state: "open",
+    });
+
+    if (existingPRs && existingPRs.length > 0 && existingPRs[0]) {
+      spinner.stop("Pull Request already exists");
+      const pr = existingPRs[0];
+      p.note(
+        `A pull request for this branch already exists: #${pr.number}\n${pr.html_url}`,
+        "PR Already Exists"
+      );
+      return;
+    }
+
+    // Create new PR
+    const { data } = await octokit.rest.pulls.create({
+      owner,
+      repo,
+      title,
+      body: description,
+      head: workingBranch,
+      base: baseBranch,
+    });
+
+    spinner.stop("Pull Request created successfully!");
+
+    p.note(
+      `Title: ${data.title}\n` +
+      `URL: ${data.html_url}\n` +
+      `Number: #${data.number}`,
+      "Pull Request Created"
+    );
+  } catch (error: any) {
+    spinner.stop("Failed to create Pull Request");
+    const message = error.response?.data?.message || error.message || String(error);
+    throw new Error(`Could not create PR: ${message}`);
+  }
 }
 
 /**
@@ -42,9 +191,80 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   const baseBranch = await getBaseBranch();
   const hasChanges = await hasUnstagedChanges();
 
+  let workingBranch = currentBranch;
+
+  // Special case: No changes, but branch is pushed and might need a PR
   if (!hasChanges) {
-    p.note("No changes detected. Working directory is clean.", "Nothing to do");
-    return;
+    const branchIsPushed = await isBranchPushed();
+    const isGitHub = await isGitHubRepository();
+
+    // Only check for PR creation if:
+    // 1. We're not on the base branch
+    // 2. Branch is already pushed
+    // 3. It's a GitHub repository
+    if (currentBranch !== baseBranch && branchIsPushed && isGitHub) {
+      p.note(
+        `Branch: ${currentBranch}\n` +
+        `Base: ${baseBranch}\n` +
+        `Status: Already pushed\n` +
+        `Has changes: No`,
+        "Current State"
+      );
+
+      // Check if PR already exists
+      const githubToken = await getGitHubToken();
+      if (githubToken) {
+        spinner.start("Checking for existing PR...");
+        const prCheck = await prExistsForBranch(githubToken);
+        spinner.stop();
+
+        if (prCheck.exists && prCheck.pr) {
+          p.note(
+            `A pull request already exists for this branch: #${prCheck.pr.number}\n${prCheck.pr.url}`,
+            "PR Already Exists"
+          );
+          return;
+        }
+
+        // Branch is pushed but no PR exists - offer to create one
+        p.log.info("Branch is pushed but no PR exists yet.");
+
+        let shouldCreatePR = autoYes;
+
+        if (!autoYes) {
+          const response = await p.confirm({
+            message: "Would you like to create a Pull Request now?",
+            initialValue: true,
+          });
+
+          if (p.isCancel(response) || !response) {
+            p.note("PR not created.", "Done");
+            return;
+          }
+
+          shouldCreatePR = response;
+        } else {
+          p.log.info("Auto-accepting: Creating GitHub Pull Request");
+        }
+
+        if (shouldCreatePR) {
+          // Jump directly to PR creation
+          p.log.step("Creating Pull Request");
+          await createPullRequest(workingBranch, baseBranch, spinner, autoYes);
+          return;
+        }
+      } else {
+        p.note(
+          "No changes detected and cannot check for PR without GitHub token.\n" +
+          "Configure a token with 'git-ai settings' to enable PR creation.",
+          "Nothing to do"
+        );
+        return;
+      }
+    } else {
+      p.note("No changes detected. Working directory is clean.", "Nothing to do");
+      return;
+    }
   }
 
   p.note(
@@ -53,8 +273,6 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
     `Has changes: Yes`,
     "Current State"
   );
-
-  let workingBranch = currentBranch;
 
   // Step 1: Create branch if on main/master
   if (currentBranch === baseBranch) {
@@ -200,142 +418,6 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
     return;
   }
 
-  // Get branch info for PR
-  spinner.start("Analyzing commits for PR...");
-  const branchInfo = await getBranchInfo();
-
-  if (branchInfo.commits.length === 0) {
-    spinner.stop("No commits found");
-    p.note("No commits to create PR from.", "Info");
-    return;
-  }
-
-  spinner.stop(`Found ${branchInfo.commits.length} commit(s)`);
-
-  // Generate PR title and description
-  spinner.start("Generating PR title and description with AI...");
-  const { title, description } = await generatePRSuggestion(
-    workingBranch,
-    branchInfo.commits.map((c) => ({ message: c.message }))
-  );
-  spinner.stop("PR suggestion generated");
-
-  p.note(title, "PR Title");
-  p.note(description, "PR Description");
-
-  if (!autoYes) {
-    const confirmPR = await p.confirm({
-      message: "Create PR with this title and description?",
-      initialValue: true,
-    });
-
-    if (p.isCancel(confirmPR) || !confirmPR) {
-      p.note("PR not created.", "Cancelled");
-      return;
-    }
-  } else {
-    p.log.info("Auto-accepting: Creating PR with generated title and description");
-  }
-
-  // Check for GitHub token
-  let githubToken = await getGitHubToken();
-
-  if (!githubToken) {
-    if (autoYes) {
-      p.note(
-        "GitHub personal access token is required to create pull requests.\n" +
-        "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
-        "GitHub Token Missing"
-      );
-      return;
-    }
-
-    p.note(
-      "GitHub personal access token is required to create pull requests.\n" +
-      "You can create one at: https://github.com/settings/tokens\n\n" +
-      "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)",
-      "GitHub Token Required"
-    );
-
-    const token = await p.text({
-      message: "Enter your GitHub personal access token:",
-      placeholder: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      validate: (value) => {
-        if (!value || value.length === 0) return "Token is required";
-        if (!value.startsWith("ghp_") && !value.startsWith("github_pat_")) {
-          return "Token should start with 'ghp_' or 'github_pat_'";
-        }
-      },
-    });
-
-    if (p.isCancel(token)) {
-      p.cancel("PR creation cancelled");
-      return;
-    }
-
-    spinner.start("Saving GitHub token...");
-    await updateConfig({ githubToken: token });
-    spinner.stop("GitHub token saved");
-
-    githubToken = token;
-  }
-
-  // Get repo info
-  spinner.start("Getting repository information...");
-  const repoInfo = await parseGitHubRepo();
-
-  if (!repoInfo) {
-    spinner.stop("Failed to parse repository");
-    throw new Error("Could not parse GitHub repository information");
-  }
-
-  const { owner, repo } = repoInfo;
-  spinner.stop(`Repository: ${owner}/${repo}`);
-
-  // Create PR
-  spinner.start("Creating Pull Request...");
-  try {
-    const octokit = new Octokit({ auth: githubToken });
-
-    // Check if PR already exists
-    const { data: existingPRs } = await octokit.rest.pulls.list({
-      owner,
-      repo,
-      head: `${owner}:${workingBranch}`,
-      state: "open",
-    });
-
-    if (existingPRs && existingPRs.length > 0 && existingPRs[0]) {
-      spinner.stop("Pull Request already exists");
-      const pr = existingPRs[0];
-      p.note(
-        `A pull request for this branch already exists: #${pr.number}\n${pr.html_url}`,
-        "PR Already Exists"
-      );
-      return;
-    }
-
-    // Create new PR
-    const { data } = await octokit.rest.pulls.create({
-      owner,
-      repo,
-      title,
-      body: description,
-      head: workingBranch,
-      base: baseBranch,
-    });
-
-    spinner.stop("Pull Request created successfully!");
-
-    p.note(
-      `Title: ${data.title}\n` +
-      `URL: ${data.html_url}\n` +
-      `Number: #${data.number}`,
-      "Pull Request Created"
-    );
-  } catch (error: any) {
-    spinner.stop("Failed to create Pull Request");
-    const message = error.response?.data?.message || error.message || String(error);
-    throw new Error(`Could not create PR: ${message}`);
-  }
+  // Use the helper function to create the PR
+  await createPullRequest(workingBranch, baseBranch, spinner, autoYes);
 }
