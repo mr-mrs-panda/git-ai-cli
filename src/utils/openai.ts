@@ -30,7 +30,8 @@ async function getOpenAIClient(): Promise<OpenAI> {
  * Generate commit message from git changes
  */
 export async function generateCommitMessage(
-  changes: Array<{ path: string; status: string; diff: string }>
+  changes: Array<{ path: string; status: string; diff: string }>,
+  branchName?: string
 ): Promise<string> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
@@ -41,16 +42,21 @@ export async function generateCommitMessage(
     })
     .join("\n---\n\n");
 
+  const branchContext = branchName
+    ? `\nBranch name: ${branchName}\nConsider the branch name context when writing the commit message.\n`
+    : '';
+
   const prompt = `You are an expert at writing concise, meaningful git commit messages following conventional commit standards.
 
 Analyze the following git changes and generate a commit message.
-
+${branchContext}
 Rules:
 - Use conventional commit format: <type>(<scope>): <description>
 - Types: feat, fix, docs, style, refactor, test, chore
 - Keep the first line under 72 characters
 - Be specific and descriptive
 - Focus on the "why" and "what", not the "how"
+- If a branch name is provided, ensure the commit message aligns with the branch's purpose
 
 Git changes:
 ${changesText}

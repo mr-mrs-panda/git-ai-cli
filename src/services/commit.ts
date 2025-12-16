@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { getStagedChanges, stageAllChanges } from "../utils/git.ts";
+import { getStagedChanges, stageAllChanges, getCurrentBranch } from "../utils/git.ts";
 import { generateCommitMessage } from "../utils/openai.ts";
 
 export interface CommitOptions {
@@ -59,6 +59,9 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
 
     spinner.stop(`Analyzing ${includedChanges.length} file(s)`);
 
+    // Get current branch name for context
+    const currentBranch = await getCurrentBranch();
+
     // Generate commit message
     spinner.start("Generating commit message with AI...");
 
@@ -67,7 +70,8 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
         path: c.path,
         status: c.status,
         diff: c.diff,
-      }))
+      })),
+      currentBranch
     );
 
     spinner.stop("Commit message generated");
