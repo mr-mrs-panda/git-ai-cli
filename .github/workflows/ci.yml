@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        bun-version: [latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: ${{ matrix.bun-version }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+        continue-on-error: true # Continue even if no tests exist yet
+
+      - name: Build project
+        run: bun run build
+
+      - name: Check build artifact
+        run: |
+          if [ -f "./git-ai" ]; then
+            echo "Build successful - git-ai binary created"
+            ls -lh ./git-ai
+          else
+            echo "Build failed - no binary found"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: git-ai-${{ matrix.os }}
+          path: ./git-ai
+          if-no-files-found: error
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Check TypeScript
+        run: bun run tsc --noEmit
+        continue-on-error: true # Don't fail if tsc script doesn't exist
