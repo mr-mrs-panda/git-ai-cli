@@ -386,3 +386,49 @@ export async function parseGitHubRepo(): Promise<{ owner: string; repo: string }
     return null;
   }
 }
+
+/**
+ * Check if a PR exists for the current branch
+ * Requires GitHub token to check
+ */
+export async function prExistsForBranch(
+  githubToken: string
+): Promise<{ exists: boolean; pr?: { number: number; url: string } }> {
+  try {
+    const currentBranch = await getCurrentBranch();
+    const repoInfo = await parseGitHubRepo();
+
+    if (!repoInfo) {
+      return { exists: false };
+    }
+
+    const { owner, repo } = repoInfo;
+
+    // Dynamic import to avoid loading Octokit if not needed
+    const { Octokit } = await import("octokit");
+    const octokit = new Octokit({ auth: githubToken });
+
+    const { data: existingPRs } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${currentBranch}`,
+      state: "open",
+    });
+
+    if (existingPRs && existingPRs.length > 0 && existingPRs[0]) {
+      const pr = existingPRs[0];
+      return {
+        exists: true,
+        pr: {
+          number: pr.number,
+          url: pr.html_url,
+        },
+      };
+    }
+
+    return { exists: false };
+  } catch {
+    // If we can't check (no token, network error, etc.), assume PR doesn't exist
+    return { exists: false };
+  }
+}
