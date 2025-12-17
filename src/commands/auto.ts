@@ -17,6 +17,59 @@ export interface AutoOptions {
 }
 
 /**
+ * Helper function to checkout to base branch and pull latest changes
+ */
+async function checkoutAndPullBase(
+  baseBranch: string,
+  spinner: ReturnType<typeof p.spinner>,
+  autoYes: boolean
+): Promise<void> {
+  p.log.step("Final: Preparing for next feature");
+
+  let shouldCheckoutAndPull = autoYes;
+
+  if (!autoYes) {
+    const response = await p.confirm({
+      message: `Checkout to ${baseBranch} and pull latest changes?`,
+      initialValue: true,
+    });
+
+    if (p.isCancel(response) || !response) {
+      p.note("Staying on current branch.", "Done");
+      return;
+    }
+
+    shouldCheckoutAndPull = response;
+  } else {
+    p.log.info(`Auto-accepting: Checking out to ${baseBranch} and pulling latest changes`);
+  }
+
+  if (shouldCheckoutAndPull) {
+    // Checkout to base branch
+    spinner.start(`Checking out to ${baseBranch}...`);
+    try {
+      await switchToBranch(baseBranch);
+      spinner.stop(`Switched to ${baseBranch}`);
+    } catch (error) {
+      spinner.stop("Failed to checkout");
+      throw new Error(`Failed to checkout to ${baseBranch}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Pull latest changes
+    spinner.start("Pulling latest changes...");
+    try {
+      await pullBranch();
+      spinner.stop("Successfully pulled latest changes");
+    } catch (error) {
+      spinner.stop("Pull failed");
+      throw new Error(`Failed to pull: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    p.note(`Ready to start working on your next feature!`, "All set");
+  }
+}
+
+/**
  * Helper function to create a PR for the current branch
  */
 async function createPullRequest(
@@ -274,84 +327,8 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
     "Current State"
   );
 
-  // Step 0: Ask to checkout to main and pull if on a feature branch
-  if (currentBranch !== baseBranch) {
-    let shouldCheckoutAndPull = autoYes;
-
-    if (!autoYes) {
-      const response = await p.confirm({
-        message: `Checkout to ${baseBranch} and pull latest changes?`,
-        initialValue: true,
-      });
-
-      if (p.isCancel(response)) {
-        p.cancel("Auto mode cancelled");
-        return;
-      }
-
-      shouldCheckoutAndPull = response;
-    } else {
-      p.log.info(`Auto-accepting: Checking out to ${baseBranch} and pulling latest changes`);
-    }
-
-    if (shouldCheckoutAndPull) {
-      // Stash current changes first
-      spinner.start("Stashing current changes...");
-      const stashProc = Bun.spawn(["git", "stash", "push", "-u", "-m", "git-ai auto mode stash"], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      await stashProc.exited;
-
-      if (stashProc.exitCode !== 0) {
-        const error = await new Response(stashProc.stderr).text();
-        spinner.stop("Failed to stash changes");
-        throw new Error(error || "Failed to stash changes");
-      }
-      spinner.stop("Changes stashed");
-
-      // Checkout to base branch
-      spinner.start(`Checking out to ${baseBranch}...`);
-      try {
-        await switchToBranch(baseBranch);
-        spinner.stop(`Switched to ${baseBranch}`);
-      } catch (error) {
-        spinner.stop("Failed to checkout");
-        throw new Error(`Failed to checkout to ${baseBranch}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-
-      // Pull latest changes
-      spinner.start("Pulling latest changes...");
-      try {
-        await pullBranch();
-        spinner.stop("Successfully pulled latest changes");
-      } catch (error) {
-        spinner.stop("Pull failed");
-        throw new Error(`Failed to pull: ${error instanceof Error ? error.message : String(error)}`);
-      }
-
-      // Pop stashed changes
-      spinner.start("Restoring stashed changes...");
-      const popProc = Bun.spawn(["git", "stash", "pop"], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      await popProc.exited;
-
-      if (popProc.exitCode !== 0) {
-        const error = await new Response(popProc.stderr).text();
-        spinner.stop("Failed to restore changes");
-        throw new Error(error || "Failed to restore stashed changes");
-      }
-      spinner.stop("Changes restored");
-
-      // Update current branch reference
-      workingBranch = baseBranch;
-    }
-  }
-
   // Step 1: Create branch if on main/master
-  if (workingBranch === baseBranch) {
+  if (currentBranch === baseBranch) {
     p.log.step("Step 1: Creating new branch (currently on base branch)");
 
     spinner.start("Analyzing changes for branch name...");
@@ -417,6 +394,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!commitMessage) {
     p.cancel("Commit cancelled");
+    await checkoutAndPullBase(baseBranch, spinner, autoYes);
     return;
   }
 
@@ -436,6 +414,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
       if (p.isCancel(response)) {
         p.note("Branch not pushed. You can push manually later.", "Done");
+        await checkoutAndPullBase(baseBranch, spinner, autoYes);
         return;
       }
 
@@ -455,6 +434,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
       }
     } else {
       p.note("Branch not pushed. You can push manually later.", "Done");
+      await checkoutAndPullBase(baseBranch, spinner, autoYes);
       return;
     }
   } else {
@@ -466,6 +446,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!isGitHub) {
     p.note("Not a GitHub repository. Skipping PR creation.", "Done");
+    await checkoutAndPullBase(baseBranch, spinner, autoYes);
     return;
   }
 
@@ -481,6 +462,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
     if (p.isCancel(response) || !response) {
       p.note("PR not created. You can create it manually later.", "Done");
+      await checkoutAndPullBase(baseBranch, spinner, autoYes);
       return;
     }
 
@@ -491,9 +473,13 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!shouldCreatePR) {
     p.note("PR not created. You can create it manually later.", "Done");
+    await checkoutAndPullBase(baseBranch, spinner, autoYes);
     return;
   }
 
   // Use the helper function to create the PR
   await createPullRequest(workingBranch, baseBranch, spinner, autoYes);
+
+  // Final step: Checkout to base branch and pull latest changes
+  await checkoutAndPullBase(baseBranch, spinner, autoYes);
 }
