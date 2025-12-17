@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges } from "../utils/git.ts";
+import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges, switchToBranch, pullBranch } from "../utils/git.ts";
 import { analyzeBranchName } from "../services/branch.ts";
 import { generateAndCommit } from "../services/commit.ts";
 import { getBranchInfo, pushToOrigin, isBranchPushed, isGitHubRepository, prExistsForBranch } from "../utils/git.ts";
@@ -14,6 +14,59 @@ export interface AutoOptions {
    * @default false
    */
   autoYes?: boolean;
+}
+
+/**
+ * Helper function to checkout to base branch and pull latest changes
+ */
+async function checkoutAndPullBase(
+  baseBranch: string,
+  spinner: ReturnType<typeof p.spinner>,
+  autoYes: boolean
+): Promise<void> {
+  p.log.step("Final: Preparing for next feature");
+
+  let shouldCheckoutAndPull = autoYes;
+
+  if (!autoYes) {
+    const response = await p.confirm({
+      message: `Checkout to ${baseBranch} and pull latest changes?`,
+      initialValue: true,
+    });
+
+    if (p.isCancel(response) || !response) {
+      p.note("Staying on current branch.", "Done");
+      return;
+    }
+
+    shouldCheckoutAndPull = response;
+  } else {
+    p.log.info(`Auto-accepting: Checking out to ${baseBranch} and pulling latest changes`);
+  }
+
+  if (shouldCheckoutAndPull) {
+    // Checkout to base branch
+    spinner.start(`Checking out to ${baseBranch}...`);
+    try {
+      await switchToBranch(baseBranch);
+      spinner.stop(`Switched to ${baseBranch}`);
+    } catch (error) {
+      spinner.stop("Failed to checkout");
+      throw new Error(`Failed to checkout to ${baseBranch}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Pull latest changes
+    spinner.start("Pulling latest changes...");
+    try {
+      await pullBranch();
+      spinner.stop("Successfully pulled latest changes");
+    } catch (error) {
+      spinner.stop("Pull failed");
+      throw new Error(`Failed to pull: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    p.note(`Ready to start working on your next feature!`, "All set");
+  }
 }
 
 /**
@@ -341,6 +394,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!commitMessage) {
     p.cancel("Commit cancelled");
+    await checkoutAndPullBase(baseBranch, spinner, autoYes);
     return;
   }
 
@@ -360,6 +414,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
       if (p.isCancel(response)) {
         p.note("Branch not pushed. You can push manually later.", "Done");
+        await checkoutAndPullBase(baseBranch, spinner, autoYes);
         return;
       }
 
@@ -379,6 +434,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
       }
     } else {
       p.note("Branch not pushed. You can push manually later.", "Done");
+      await checkoutAndPullBase(baseBranch, spinner, autoYes);
       return;
     }
   } else {
@@ -390,6 +446,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!isGitHub) {
     p.note("Not a GitHub repository. Skipping PR creation.", "Done");
+    await checkoutAndPullBase(baseBranch, spinner, autoYes);
     return;
   }
 
@@ -405,6 +462,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
     if (p.isCancel(response) || !response) {
       p.note("PR not created. You can create it manually later.", "Done");
+      await checkoutAndPullBase(baseBranch, spinner, autoYes);
       return;
     }
 
@@ -415,9 +473,13 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!shouldCreatePR) {
     p.note("PR not created. You can create it manually later.", "Done");
+    await checkoutAndPullBase(baseBranch, spinner, autoYes);
     return;
   }
 
   // Use the helper function to create the PR
   await createPullRequest(workingBranch, baseBranch, spinner, autoYes);
+
+  // Final step: Checkout to base branch and pull latest changes
+  await checkoutAndPullBase(baseBranch, spinner, autoYes);
 }
