@@ -29,16 +29,18 @@ Options:
   -h, --help     Show this help message
   -v, --version  Show version
   -y, --yes      Auto-accept all prompts (blind mode)
+  --yolo         YOLO mode: auto-merge PR and delete branch (implies -y)
 
 Examples:
-  git-ai          # Interactive mode
-  git-ai auto     # Smart workflow (recommended for quick changes)
-  git-ai auto -y  # Auto mode with all prompts auto-accepted
-  git-ai branch   # Create branch from changes
-  git-ai commit   # Generate commit message
-  git-ai pr       # Generate PR suggestion
-  git-ai cleanup  # Clean up merged branches
-  git-ai settings # Configure settings
+  git-ai              # Interactive mode
+  git-ai auto         # Smart workflow (recommended for quick changes)
+  git-ai auto -y      # Auto mode with all prompts auto-accepted
+  git-ai auto --yolo  # YOLO mode: auto-merge PR and delete branch
+  git-ai branch       # Create branch from changes
+  git-ai commit       # Generate commit message
+  git-ai pr           # Generate PR suggestion
+  git-ai cleanup      # Clean up merged branches
+  git-ai settings     # Configure settings
 
 Documentation:
   https://github.com/yourusername/git-ai-cli
@@ -160,8 +162,9 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Check for yes flag
+  // Check for yes and yolo flags
   const yesFlag = args.includes("-y") || args.includes("--yes");
+  const yoloFlag = args.includes("--yolo");
 
   // Filter out flags to get the command
   const commandArgs = args.filter((arg) => !arg.startsWith("-"));
@@ -191,7 +194,7 @@ async function main(): Promise<void> {
   // Execute the command
   try {
     if (action === "auto") {
-      await auto({ autoYes: yesFlag });
+      await auto({ autoYes: yesFlag, yolo: yoloFlag });
     } else if (action === "branch") {
       await createBranch();
     } else if (action === "commit") {
