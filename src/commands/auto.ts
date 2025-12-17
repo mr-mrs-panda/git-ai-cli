@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges } from "../utils/git.ts";
+import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges, switchToBranch, pullBranch } from "../utils/git.ts";
 import { analyzeBranchName } from "../services/branch.ts";
 import { generateAndCommit } from "../services/commit.ts";
 import { getBranchInfo, pushToOrigin, isBranchPushed, isGitHubRepository, prExistsForBranch } from "../utils/git.ts";
@@ -274,8 +274,84 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
     "Current State"
   );
 
+  // Step 0: Ask to checkout to main and pull if on a feature branch
+  if (currentBranch !== baseBranch) {
+    let shouldCheckoutAndPull = autoYes;
+
+    if (!autoYes) {
+      const response = await p.confirm({
+        message: `Checkout to ${baseBranch} and pull latest changes?`,
+        initialValue: true,
+      });
+
+      if (p.isCancel(response)) {
+        p.cancel("Auto mode cancelled");
+        return;
+      }
+
+      shouldCheckoutAndPull = response;
+    } else {
+      p.log.info(`Auto-accepting: Checking out to ${baseBranch} and pulling latest changes`);
+    }
+
+    if (shouldCheckoutAndPull) {
+      // Stash current changes first
+      spinner.start("Stashing current changes...");
+      const stashProc = Bun.spawn(["git", "stash", "push", "-u", "-m", "git-ai auto mode stash"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await stashProc.exited;
+
+      if (stashProc.exitCode !== 0) {
+        const error = await new Response(stashProc.stderr).text();
+        spinner.stop("Failed to stash changes");
+        throw new Error(error || "Failed to stash changes");
+      }
+      spinner.stop("Changes stashed");
+
+      // Checkout to base branch
+      spinner.start(`Checking out to ${baseBranch}...`);
+      try {
+        await switchToBranch(baseBranch);
+        spinner.stop(`Switched to ${baseBranch}`);
+      } catch (error) {
+        spinner.stop("Failed to checkout");
+        throw new Error(`Failed to checkout to ${baseBranch}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // Pull latest changes
+      spinner.start("Pulling latest changes...");
+      try {
+        await pullBranch();
+        spinner.stop("Successfully pulled latest changes");
+      } catch (error) {
+        spinner.stop("Pull failed");
+        throw new Error(`Failed to pull: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // Pop stashed changes
+      spinner.start("Restoring stashed changes...");
+      const popProc = Bun.spawn(["git", "stash", "pop"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await popProc.exited;
+
+      if (popProc.exitCode !== 0) {
+        const error = await new Response(popProc.stderr).text();
+        spinner.stop("Failed to restore changes");
+        throw new Error(error || "Failed to restore stashed changes");
+      }
+      spinner.stop("Changes restored");
+
+      // Update current branch reference
+      workingBranch = baseBranch;
+    }
+  }
+
   // Step 1: Create branch if on main/master
-  if (currentBranch === baseBranch) {
+  if (workingBranch === baseBranch) {
     p.log.step("Step 1: Creating new branch (currently on base branch)");
 
     spinner.start("Analyzing changes for branch name...");

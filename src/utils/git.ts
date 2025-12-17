@@ -617,3 +617,19 @@ export async function switchToBranch(branchName: string): Promise<void> {
     throw new Error(error || `Failed to switch to branch '${branchName}'`);
   }
 }
+
+/**
+ * Pull changes from origin for the current branch
+ */
+export async function pullBranch(): Promise<void> {
+  const proc = Bun.spawn(["git", "pull"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to pull from origin");
+  }
+}
