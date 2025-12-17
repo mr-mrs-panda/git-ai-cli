@@ -14,6 +14,11 @@ export interface AutoOptions {
    * @default false
    */
   autoYes?: boolean;
+  /**
+   * YOLO mode - auto-merge PR and delete branch (implies autoYes)
+   * @default false
+   */
+  yolo?: boolean;
 }
 
 /**
@@ -70,14 +75,65 @@ async function checkoutAndPullBase(
 }
 
 /**
+ * Helper function to merge PR and delete source branch
+ */
+async function mergePRAndDeleteBranch(
+  prNumber: number,
+  owner: string,
+  repo: string,
+  branchName: string,
+  spinner: ReturnType<typeof p.spinner>
+): Promise<void> {
+  const githubToken = await getGitHubToken();
+  if (!githubToken) {
+    throw new Error("GitHub token required to merge PR");
+  }
+
+  const octokit = new Octokit({ auth: githubToken });
+
+  // Merge the PR
+  spinner.start(`Merging PR #${prNumber}...`);
+  try {
+    await octokit.rest.pulls.merge({
+      owner,
+      repo,
+      pull_number: prNumber,
+      merge_method: "squash",
+    });
+    spinner.stop(`PR #${prNumber} merged successfully!`);
+    p.note(`Pull request #${prNumber} has been merged`, "Merged");
+  } catch (error: any) {
+    spinner.stop("Failed to merge PR");
+    const message = error.response?.data?.message || error.message || String(error);
+    throw new Error(`Could not merge PR: ${message}`);
+  }
+
+  // Delete the remote branch
+  spinner.start(`Deleting remote branch '${branchName}'...`);
+  try {
+    await octokit.rest.git.deleteRef({
+      owner,
+      repo,
+      ref: `heads/${branchName}`,
+    });
+    spinner.stop(`Remote branch '${branchName}' deleted`);
+  } catch (error: any) {
+    spinner.stop("Failed to delete remote branch");
+    const message = error.response?.data?.message || error.message || String(error);
+    p.note(`Warning: Could not delete remote branch: ${message}`, "Warning");
+  }
+}
+
+/**
  * Helper function to create a PR for the current branch
  */
 async function createPullRequest(
   workingBranch: string,
   baseBranch: string,
   spinner: ReturnType<typeof p.spinner>,
-  autoYes: boolean
-): Promise<void> {
+  autoYes: boolean,
+  yolo: boolean = false
+): Promise<{ prNumber?: number; owner?: string; repo?: string }> {
   // Get branch info for PR
   spinner.start("Analyzing commits for PR...");
   const branchInfo = await getBranchInfo();
@@ -85,7 +141,7 @@ async function createPullRequest(
   if (branchInfo.commits.length === 0) {
     spinner.stop("No commits found");
     p.note("No commits to create PR from.", "Info");
-    return;
+    return {};
   }
 
   spinner.stop(`Found ${branchInfo.commits.length} commit(s)`);
@@ -109,7 +165,7 @@ async function createPullRequest(
 
     if (p.isCancel(confirmPR) || !confirmPR) {
       p.note("PR not created.", "Cancelled");
-      return;
+      return {};
     }
   } else {
     p.log.info("Auto-accepting: Creating PR with generated title and description");
@@ -125,7 +181,7 @@ async function createPullRequest(
         "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
         "GitHub Token Missing"
       );
-      return;
+      return {};
     }
 
     p.note(
@@ -148,7 +204,7 @@ async function createPullRequest(
 
     if (p.isCancel(token)) {
       p.cancel("PR creation cancelled");
-      return;
+      return {};
     }
 
     spinner.start("Saving GitHub token...");
@@ -190,7 +246,13 @@ async function createPullRequest(
         `A pull request for this branch already exists: #${pr.number}\n${pr.html_url}`,
         "PR Already Exists"
       );
-      return;
+
+      // If yolo mode and PR exists, merge it
+      if (yolo) {
+        return { prNumber: pr.number, owner, repo };
+      }
+
+      return {};
     }
 
     // Create new PR
@@ -211,6 +273,9 @@ async function createPullRequest(
       `Number: #${data.number}`,
       "Pull Request Created"
     );
+
+    // Return PR info for potential merging
+    return { prNumber: data.number, owner, repo };
   } catch (error: any) {
     spinner.stop("Failed to create Pull Request");
     const message = error.response?.data?.message || error.message || String(error);
@@ -228,7 +293,9 @@ async function createPullRequest(
  * 4. Create PR (if GitHub repo)
  */
 export async function auto(options: AutoOptions = {}): Promise<void> {
-  const { autoYes = false } = options;
+  const { autoYes = false, yolo = false } = options;
+  // YOLO mode implies autoYes
+  const effectiveAutoYes = yolo || autoYes;
   const spinner = p.spinner();
 
   // Check if we're in a git repository
@@ -282,9 +349,9 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
         // Branch is pushed but no PR exists - offer to create one
         p.log.info("Branch is pushed but no PR exists yet.");
 
-        let shouldCreatePR = autoYes;
+        let shouldCreatePR = effectiveAutoYes;
 
-        if (!autoYes) {
+        if (!effectiveAutoYes) {
           const response = await p.confirm({
             message: "Would you like to create a Pull Request now?",
             initialValue: true,
@@ -303,7 +370,13 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
         if (shouldCreatePR) {
           // Jump directly to PR creation
           p.log.step("Creating Pull Request");
-          await createPullRequest(workingBranch, baseBranch, spinner, autoYes);
+          const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, yolo);
+
+          // If yolo mode, merge the PR and delete the branch
+          if (yolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
+            await mergePRAndDeleteBranch(prInfo.prNumber, prInfo.owner, prInfo.repo, workingBranch, spinner);
+          }
+
           return;
         }
       } else {
@@ -350,7 +423,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
     let shouldCreateBranch = true;
 
-    if (!autoYes) {
+    if (!effectiveAutoYes) {
       const response = await p.confirm({
         message: `Create branch '${branchSuggestion.name}'?`,
         initialValue: true,
@@ -389,12 +462,12 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   p.log.step("Step 2: Generating commit with AI");
 
   const commitMessage = await generateAndCommit({
-    confirmBeforeCommit: !autoYes,
+    confirmBeforeCommit: !effectiveAutoYes,
   });
 
   if (!commitMessage) {
     p.cancel("Commit cancelled");
-    await checkoutAndPullBase(baseBranch, spinner, autoYes);
+    await checkoutAndPullBase(baseBranch, spinner, effectiveAutoYes);
     return;
   }
 
@@ -404,9 +477,9 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   const isPushed = await isBranchPushed();
 
   if (!isPushed) {
-    let shouldPush = autoYes;
+    let shouldPush = effectiveAutoYes;
 
-    if (!autoYes) {
+    if (!effectiveAutoYes) {
       const response = await p.confirm({
         message: "Push branch to origin?",
         initialValue: true,
@@ -414,7 +487,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
       if (p.isCancel(response)) {
         p.note("Branch not pushed. You can push manually later.", "Done");
-        await checkoutAndPullBase(baseBranch, spinner, autoYes);
+        await checkoutAndPullBase(baseBranch, spinner, effectiveAutoYes);
         return;
       }
 
@@ -434,7 +507,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
       }
     } else {
       p.note("Branch not pushed. You can push manually later.", "Done");
-      await checkoutAndPullBase(baseBranch, spinner, autoYes);
+      await checkoutAndPullBase(baseBranch, spinner, effectiveAutoYes);
       return;
     }
   } else {
@@ -446,15 +519,15 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!isGitHub) {
     p.note("Not a GitHub repository. Skipping PR creation.", "Done");
-    await checkoutAndPullBase(baseBranch, spinner, autoYes);
+    await checkoutAndPullBase(baseBranch, spinner, effectiveAutoYes);
     return;
   }
 
   p.log.step("Step 4: Creating Pull Request");
 
-  let shouldCreatePR = autoYes;
+  let shouldCreatePR = effectiveAutoYes;
 
-  if (!autoYes) {
+  if (!effectiveAutoYes) {
     const response = await p.confirm({
       message: "Create GitHub Pull Request?",
       initialValue: true,
@@ -462,7 +535,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
     if (p.isCancel(response) || !response) {
       p.note("PR not created. You can create it manually later.", "Done");
-      await checkoutAndPullBase(baseBranch, spinner, autoYes);
+      await checkoutAndPullBase(baseBranch, spinner, effectiveAutoYes);
       return;
     }
 
@@ -473,13 +546,18 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   if (!shouldCreatePR) {
     p.note("PR not created. You can create it manually later.", "Done");
-    await checkoutAndPullBase(baseBranch, spinner, autoYes);
+    await checkoutAndPullBase(baseBranch, spinner, effectiveAutoYes);
     return;
   }
 
   // Use the helper function to create the PR
-  await createPullRequest(workingBranch, baseBranch, spinner, autoYes);
+  const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, yolo);
+
+  // If yolo mode, merge the PR and delete the branch
+  if (yolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
+    await mergePRAndDeleteBranch(prInfo.prNumber, prInfo.owner, prInfo.repo, workingBranch, spinner);
+  }
 
   // Final step: Checkout to base branch and pull latest changes
-  await checkoutAndPullBase(baseBranch, spinner, autoYes);
+  await checkoutAndPullBase(baseBranch, spinner, effectiveAutoYes);
 }
