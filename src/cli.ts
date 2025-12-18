@@ -196,13 +196,13 @@ async function main(): Promise<void> {
     if (action === "auto") {
       await auto({ autoYes: yesFlag, yolo: yoloFlag });
     } else if (action === "branch") {
-      await createBranch();
+      await createBranch({ autoYes: yesFlag });
     } else if (action === "commit") {
-      await commit();
+      await commit({ autoYes: yesFlag });
     } else if (action === "pr") {
-      await prSuggest();
+      await prSuggest({ autoYes: yesFlag });
     } else if (action === "cleanup") {
-      await cleanup();
+      await cleanup({ autoYes: yesFlag });
     } else if (action === "settings") {
       await settings();
     }

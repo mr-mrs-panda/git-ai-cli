@@ -2,7 +2,12 @@ import * as p from "@clack/prompts";
 import { getStagedChanges, isGitRepository, hasUnstagedChanges, hasOriginRemote, addOriginRemote, pushToOrigin } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
 
-export async function commit(): Promise<void> {
+export interface CommitOptions {
+  autoYes?: boolean;
+}
+
+export async function commit(options: CommitOptions = {}): Promise<void> {
+  const { autoYes = false } = options;
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
   if (!isRepo) {
@@ -22,14 +27,22 @@ export async function commit(): Promise<void> {
     const hasUnstaged = await hasUnstagedChanges();
 
     if (hasUnstaged) {
-      const stageAll = await p.confirm({
-        message: "No staged changes found. Would you like to stage all changes?",
-        initialValue: true,
-      });
+      let stageAll = autoYes;
 
-      if (p.isCancel(stageAll)) {
-        p.cancel("Commit cancelled");
-        return;
+      if (!autoYes) {
+        const response = await p.confirm({
+          message: "No staged changes found. Would you like to stage all changes?",
+          initialValue: true,
+        });
+
+        if (p.isCancel(response)) {
+          p.cancel("Commit cancelled");
+          return;
+        }
+
+        stageAll = response;
+      } else {
+        p.log.info("Auto-accepting: Staging all changes");
       }
 
       if (!stageAll) {
@@ -44,7 +57,7 @@ export async function commit(): Promise<void> {
 
   // Use the shared commit service
   const commitMessage = await generateAndCommit({
-    confirmBeforeCommit: true,
+    confirmBeforeCommit: !autoYes,
     spinner,
   });
 
@@ -53,14 +66,22 @@ export async function commit(): Promise<void> {
   }
 
   // Ask if user wants to push
-  const shouldPush = await p.confirm({
-    message: "Do you want to push this commit?",
-    initialValue: true,
-  });
+  let shouldPush = autoYes;
 
-  if (p.isCancel(shouldPush)) {
-    p.note("Commit created but not pushed.", "Done");
-    return;
+  if (!autoYes) {
+    const response = await p.confirm({
+      message: "Do you want to push this commit?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(response)) {
+      p.note("Commit created but not pushed.", "Done");
+      return;
+    }
+
+    shouldPush = response;
+  } else {
+    p.log.info("Auto-accepting: Pushing to origin");
   }
 
   if (shouldPush) {
@@ -69,6 +90,11 @@ export async function commit(): Promise<void> {
 
     if (!hasOrigin) {
       spinner.stop("No origin remote found");
+
+      if (autoYes) {
+        p.note("Commit created but not pushed (no origin remote configured).", "Done");
+        return;
+      }
 
       const remoteUrl = await p.text({
         message: "Enter the remote repository URL:",

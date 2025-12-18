@@ -3,7 +3,12 @@ import { Octokit } from "octokit";
 import { getBranchInfo, isGitRepository, isGitHubRepository, parseGitHubRepo, isBranchPushed, pushToOrigin, getBaseBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
 
-export async function prSuggest(): Promise<void> {
+export interface PrSuggestOptions {
+  autoYes?: boolean;
+}
+
+export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
+  const { autoYes = false } = options;
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -14,14 +19,22 @@ export async function prSuggest(): Promise<void> {
   // Check for unstaged/uncommitted changes
   const hasUnstaged = await (await import("../utils/git.ts")).hasUnstagedChanges();
   if (hasUnstaged) {
-    const shouldCommit = await p.confirm({
-      message: "You have unstaged or uncommitted changes. Would you like to commit them with AI?",
-      initialValue: true,
-    });
-    if (p.isCancel(shouldCommit)) {
-      p.cancel("PR suggestion cancelled");
-      return;
+    let shouldCommit = autoYes;
+
+    if (!autoYes) {
+      const response = await p.confirm({
+        message: "You have unstaged or uncommitted changes. Would you like to commit them with AI?",
+        initialValue: true,
+      });
+      if (p.isCancel(response)) {
+        p.cancel("PR suggestion cancelled");
+        return;
+      }
+      shouldCommit = response;
+    } else {
+      p.log.info("Auto-accepting: Committing changes with AI");
     }
+
     if (!shouldCommit) {
       p.note("Please commit and push your changes before creating a PR.", "Info");
       return;
@@ -30,7 +43,7 @@ export async function prSuggest(): Promise<void> {
     // Use the AI-powered commit service
     const { generateAndCommit } = await import("../services/commit.ts");
     const commitMessage = await generateAndCommit({
-      confirmBeforeCommit: true,
+      confirmBeforeCommit: !autoYes,
     });
 
     if (!commitMessage) {
@@ -100,32 +113,46 @@ export async function prSuggest(): Promise<void> {
     // Check if this is a GitHub repository
     const isGitHub = await isGitHubRepository();
 
-    // Prepare action options
-    const options: Array<{ value: string; label: string }> = [];
+    // In autoYes mode, create PR if GitHub, otherwise just show
+    let action: string;
+    if (autoYes) {
+      if (isGitHub) {
+        p.log.info("Auto-accepting: Creating GitHub Pull Request");
+        action = "create-pr";
+      } else {
+        p.log.info("Not a GitHub repository, displaying suggestion only");
+        action = "nothing";
+      }
+    } else {
+      // Prepare action options
+      const options: Array<{ value: string; label: string }> = [];
 
-    if (isGitHub) {
-      options.push({ value: "create-pr", label: "Create GitHub Pull Request" });
-    }
+      if (isGitHub) {
+        options.push({ value: "create-pr", label: "Create GitHub Pull Request" });
+      }
 
-    options.push(
-      { value: "copy-title", label: "Copy title to clipboard" },
-      { value: "copy-desc", label: "Copy description to clipboard" },
-      { value: "copy-both", label: "Copy both (formatted)" },
-      { value: "nothing", label: "Nothing, just show me" }
-    );
+      options.push(
+        { value: "copy-title", label: "Copy title to clipboard" },
+        { value: "copy-desc", label: "Copy description to clipboard" },
+        { value: "copy-both", label: "Copy both (formatted)" },
+        { value: "nothing", label: "Nothing, just show me" }
+      );
 
-    // Ask if user wants to copy
-    const action = await p.select({
-      message: "What would you like to do?",
-      options,
-    });
+      // Ask if user wants to copy
+      const selectedAction = await p.select({
+        message: "What would you like to do?",
+        options,
+      });
 
-    if (p.isCancel(action)) {
-      return;
+      if (p.isCancel(selectedAction)) {
+        return;
+      }
+
+      action = selectedAction as string;
     }
 
     if (action === "create-pr") {
-      await createGitHubPR(title, description, currentBranch);
+      await createGitHubPR(title, description, currentBranch, autoYes);
     } else if (action === "copy-title") {
       await copyToClipboard(title);
       p.note("Title copied to clipboard!", "Success");
@@ -194,24 +221,33 @@ async function copyToClipboard(text: string): Promise<void> {
 /**
  * Create a GitHub Pull Request
  */
-async function createGitHubPR(title: string, description: string, currentBranch: string): Promise<void> {
+async function createGitHubPR(title: string, description: string, currentBranch: string, autoYes: boolean = false): Promise<void> {
   const spinner = p.spinner();
 
   // Check if branch is pushed
+  spinner.start("Checking if branch is pushed...");
   spinner.start("Checking if branch is pushed...");
   const isPushed = await isBranchPushed();
 
   if (!isPushed) {
     spinner.stop("Branch not pushed to origin");
 
-    const shouldPush = await p.confirm({
-      message: "Your branch needs to be pushed first. Push now?",
-      initialValue: true,
-    });
+    let shouldPush = autoYes;
 
-    if (p.isCancel(shouldPush)) {
-      p.cancel("PR creation cancelled");
-      return;
+    if (!autoYes) {
+      const response = await p.confirm({
+        message: "Your branch needs to be pushed first. Push now?",
+        initialValue: true,
+      });
+
+      if (p.isCancel(response)) {
+        p.cancel("PR creation cancelled");
+        return;
+      }
+
+      shouldPush = response;
+    } else {
+      p.log.info("Auto-accepting: Pushing branch to origin");
     }
 
     if (shouldPush) {
@@ -235,6 +271,15 @@ async function createGitHubPR(title: string, description: string, currentBranch:
   let githubToken = await (await import("../utils/config.ts")).getGitHubToken();
 
   if (!githubToken) {
+    if (autoYes) {
+      p.note(
+        "GitHub personal access token is required to create pull requests.\n" +
+        "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
+        "GitHub Token Missing"
+      );
+      return;
+    }
+
     p.note(
       "GitHub personal access token is required to create pull requests.\n" +
       "You can create one at: https://github.com/settings/tokens\n\n" +
