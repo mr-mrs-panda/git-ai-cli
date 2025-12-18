@@ -53,12 +53,13 @@ export async function commit(options: CommitOptions = {}): Promise<void> {
       p.note("No changes to commit. Working directory is clean.", "Info");
       return;
     }
+  } else {
+    spinner.stop("Staged changes found");
   }
 
   // Use the shared commit service
   const commitMessage = await generateAndCommit({
     confirmBeforeCommit: !autoYes,
-    spinner,
   });
 
   if (!commitMessage) {

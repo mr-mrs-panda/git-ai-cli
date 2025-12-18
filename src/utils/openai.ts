@@ -27,6 +27,107 @@ async function getOpenAIClient(): Promise<OpenAI> {
 }
 
 /**
+ * Generate commit message and analyze for bugs in one request
+ */
+export async function generateCommitMessageWithBugAnalysis(
+  changes: Array<{ path: string; status: string; diff: string }>,
+  branchName?: string
+): Promise<{
+  commitMessage: string;
+  bugs: Array<{ file: string; description: string; severity: string }>;
+}> {
+  const config = await loadConfig();
+  const client = await getOpenAIClient();
+
+  const changesText = changes
+    .map((change) => {
+      return `File: ${change.path} (${change.status})\n${change.diff}\n`;
+    })
+    .join("\n---\n\n");
+
+  const branchContext = branchName
+    ? `\nBranch name: ${branchName}\nConsider the branch name context when writing the commit message.\n`
+    : '';
+
+  const prompt = `You are an expert code reviewer and git commit message writer.
+
+Analyze the following git changes and:
+1. Generate a commit message following Conventional Commits specification
+2. Identify any CRITICAL bugs or security issues in the code
+
+${branchContext}
+COMMIT MESSAGE STRUCTURE:
+A commit message consists of three parts separated by blank lines:
+
+1. HEADER (required): <type>[optional scope]: <description>
+   - Types: feat, fix, docs, style, refactor, perf, test, chore
+   - Keep under 72 characters
+   - Use imperative mood ("add feature" not "added feature")
+
+2. BODY (optional but recommended for non-trivial changes):
+   - Explain the "why" and "what", not the "how"
+   - Provide context and motivation for the change
+   - Wrap at 72 characters per line
+
+3. FOOTER (optional):
+   - Reference issues: "Fixes #123" or "Closes #456"
+   - Breaking changes: "BREAKING CHANGE: description"
+
+BUG ANALYSIS - Only report CRITICAL issues:
+- Null pointer/undefined access
+- Security vulnerabilities (SQL injection, XSS, etc.)
+- Logic errors causing data loss or corruption
+- Race conditions or concurrency issues
+- Incorrect error handling causing crashes
+- Memory/resource leaks
+- Infinite loops
+
+DO NOT report: style issues, minor optimizations, code smells, missing tests, documentation.
+
+Git changes:
+${changesText}
+
+RESPOND WITH VALID JSON ONLY:
+{
+  "commitMessage": "the full commit message here (can be multi-line with header, body, footer)",
+  "bugs": [
+    {
+      "file": "path/to/file.ts",
+      "description": "Brief description of the critical bug",
+      "severity": "critical|high"
+    }
+  ]
+}
+
+If no critical bugs found, return empty bugs array: "bugs": []`;
+
+  const response = await client.chat.completions.create({
+    model: config.model || "gpt-5.2",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 1,
+    reasoning_effort: config.reasoningEffort || "low",
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+
+  if (!content) {
+    throw new Error("Failed to generate commit message");
+  }
+
+  try {
+    const result = JSON.parse(content);
+    return {
+      commitMessage: result.commitMessage || "",
+      bugs: result.bugs || [],
+    };
+  } catch (error) {
+    console.error("Failed to parse response:", content);
+    throw new Error("Failed to parse AI response");
+  }
+}
+
+/**
  * Generate commit message from git changes
  */
 export async function generateCommitMessage(
