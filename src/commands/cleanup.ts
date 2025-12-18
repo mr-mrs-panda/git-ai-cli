@@ -15,6 +15,10 @@ import {
   deleteRemoteBranch,
 } from "../utils/git.ts";
 
+export interface CleanupOptions {
+  autoYes?: boolean;
+}
+
 /**
  * Cleanup merged branches
  * - Optionally switches to main/master if not already there
@@ -22,7 +26,8 @@ import {
  * - Deletes local branches that are merged in remote
  * - Only deletes branches that exist on remote (to preserve local-only branches)
  */
-export async function cleanup(): Promise<void> {
+export async function cleanup(options: CleanupOptions = {}): Promise<void> {
+  const { autoYes = false } = options;
   const spinner = p.spinner();
 
   // Check if we're in a git repository
@@ -45,14 +50,22 @@ export async function cleanup(): Promise<void> {
 
   // Step 1: Ask to switch to base branch if not already there
   if (currentBranch !== baseBranch) {
-    const switchBranch = await p.confirm({
-      message: `Switch to '${baseBranch}' branch before cleanup?`,
-      initialValue: true,
-    });
+    let switchBranch = autoYes;
 
-    if (p.isCancel(switchBranch)) {
-      p.cancel("Cleanup cancelled");
-      process.exit(0);
+    if (!autoYes) {
+      const response = await p.confirm({
+        message: `Switch to '${baseBranch}' branch before cleanup?`,
+        initialValue: true,
+      });
+
+      if (p.isCancel(response)) {
+        p.cancel("Cleanup cancelled");
+        process.exit(0);
+      }
+
+      switchBranch = response;
+    } else {
+      p.log.info(`Auto-accepting: Switching to '${baseBranch}'`);
     }
 
     if (switchBranch) {
@@ -129,6 +142,11 @@ export async function cleanup(): Promise<void> {
       return;
     }
 
+    if (autoYes) {
+      p.note("No merged branches found.", "Nothing to do");
+      return;
+    }
+
     const confirmDeleteRemoteMissing = await p.confirm({
       message: `No merged branches found. Delete the ${remoteMissingBranches.length} origin-missing branch(es) anyway?`,
       initialValue: false,
@@ -159,25 +177,42 @@ export async function cleanup(): Promise<void> {
       "Remote Branches"
     );
 
-    const confirmRemoteDelete = await p.confirm({
-      message: `Also delete these remote branch(es) from origin?`,
-      initialValue: false,
-    });
+    let confirmRemoteDelete = autoYes;
 
-    if (p.isCancel(confirmRemoteDelete)) {
-      p.cancel("Cleanup cancelled");
-      process.exit(0);
-    }
-
-    if (confirmRemoteDelete) {
-      const confirmRemoteDeleteAgain = await p.confirm({
-        message: `Really delete ${remoteMergedCandidates.length} remote branch(es) on origin? This affects the shared remote.`,
+    if (!autoYes) {
+      const response = await p.confirm({
+        message: `Also delete these remote branch(es) from origin?`,
         initialValue: false,
       });
 
-      if (p.isCancel(confirmRemoteDeleteAgain) || !confirmRemoteDeleteAgain) {
-        p.log.info("Skipping remote branch deletion");
+      if (p.isCancel(response)) {
+        p.cancel("Cleanup cancelled");
+        process.exit(0);
+      }
+
+      confirmRemoteDelete = response;
+    }
+
+    if (confirmRemoteDelete) {
+      let confirmRemoteDeleteAgain = autoYes;
+
+      if (!autoYes) {
+        const response = await p.confirm({
+          message: `Really delete ${remoteMergedCandidates.length} remote branch(es) on origin? This affects the shared remote.`,
+          initialValue: false,
+        });
+
+        if (p.isCancel(response) || !response) {
+          p.log.info("Skipping remote branch deletion");
+          confirmRemoteDeleteAgain = false;
+        } else {
+          confirmRemoteDeleteAgain = true;
+        }
       } else {
+        p.log.info("Auto-accepting: Deleting remote branches");
+      }
+
+      if (confirmRemoteDeleteAgain) {
         for (const branch of remoteMergedCandidates) {
           spinner.start(`Deleting remote 'origin/${branch}'...`);
           try {
@@ -200,12 +235,25 @@ export async function cleanup(): Promise<void> {
     "Branches to delete"
   );
 
-  const confirmDelete = await p.confirm({
-    message: `Delete ${branchesToDelete.length} merged branch(es)?`,
-    initialValue: true,
-  });
+  let confirmDelete = autoYes;
 
-  if (p.isCancel(confirmDelete) || !confirmDelete) {
+  if (!autoYes) {
+    const response = await p.confirm({
+      message: `Delete ${branchesToDelete.length} merged branch(es)?`,
+      initialValue: true,
+    });
+
+    if (p.isCancel(response) || !response) {
+      p.cancel("Cleanup cancelled");
+      process.exit(0);
+    }
+
+    confirmDelete = response;
+  } else {
+    p.log.info(`Auto-accepting: Deleting ${branchesToDelete.length} merged branch(es)`);
+  }
+
+  if (!confirmDelete) {
     p.cancel("Cleanup cancelled");
     process.exit(0);
   }

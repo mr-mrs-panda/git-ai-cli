@@ -2,7 +2,12 @@ import * as p from "@clack/prompts";
 import { isGitRepository, getCurrentBranch } from "../utils/git.ts";
 import { analyzeBranchName } from "../services/branch.ts";
 
-export async function createBranch(): Promise<void> {
+export interface CreateBranchOptions {
+  autoYes?: boolean;
+}
+
+export async function createBranch(options: CreateBranchOptions = {}): Promise<void> {
+  const { autoYes = false } = options;
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
   if (!isRepo) {
@@ -47,36 +52,50 @@ export async function createBranch(): Promise<void> {
   );
 
   // Ask if user wants to create the branch
-  const shouldCreate = await p.confirm({
-    message: `Create branch '${suggestion.name}'?`,
-    initialValue: true,
-  });
+  let shouldCreate = autoYes;
+  let customName: string | undefined;
 
-  if (p.isCancel(shouldCreate)) {
-    p.cancel("Branch creation cancelled");
-    return;
-  }
-
-  if (!shouldCreate) {
-    // Offer to let user customize the name
-    const customName = await p.text({
-      message: "Enter a custom branch name (or press Ctrl+C to cancel):",
-      placeholder: suggestion.name,
-      validate: (value) => {
-        if (!value || value.length === 0) return "Branch name is required";
-        if (value.includes(" ")) return "Branch name cannot contain spaces";
-        if (!/^[a-zA-Z0-9/_-]+$/.test(value)) {
-          return "Branch name can only contain letters, numbers, hyphens, underscores, and slashes";
-        }
-      },
+  if (!autoYes) {
+    const response = await p.confirm({
+      message: `Create branch '${suggestion.name}'?`,
+      initialValue: true,
     });
 
-    if (p.isCancel(customName)) {
+    if (p.isCancel(response)) {
       p.cancel("Branch creation cancelled");
       return;
     }
 
-    suggestion.name = customName;
+    shouldCreate = response;
+
+    if (!shouldCreate) {
+      // Offer to let user customize the name
+      customName = await p.text({
+        message: "Enter a custom branch name (or press Ctrl+C to cancel):",
+        placeholder: suggestion.name,
+        validate: (value) => {
+          if (!value || value.length === 0) return "Branch name is required";
+          if (value.includes(" ")) return "Branch name cannot contain spaces";
+          if (!/^[a-zA-Z0-9/_-]+$/.test(value)) {
+            return "Branch name can only contain letters, numbers, hyphens, underscores, and slashes";
+          }
+        },
+      }) as string;
+
+      if (p.isCancel(customName)) {
+        p.cancel("Branch creation cancelled");
+        return;
+      }
+
+      suggestion.name = customName;
+      shouldCreate = true;
+    }
+  } else {
+    p.log.info(`Auto-accepting: Creating branch '${suggestion.name}'`);
+  }
+
+  if (!shouldCreate) {
+    return;
   }
 
   // Create the branch
