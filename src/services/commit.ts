@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import { getStagedChanges, stageAllChanges, getCurrentBranch } from "../utils/git.ts";
-import { generateCommitMessage } from "../utils/openai.ts";
+import { generateCommitMessageWithBugAnalysis } from "../utils/openai.ts";
 
 export interface CommitOptions {
   /**
@@ -62,10 +62,9 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
     // Get current branch name for context
     const currentBranch = await getCurrentBranch();
 
-    // Generate commit message
-    spinner.start("Generating commit message with AI...");
-
-    const commitMessage = await generateCommitMessage(
+    // Generate commit message and analyze for bugs in one request
+    spinner.start("Generating commit message and analyzing for bugs...");
+    const { commitMessage, bugs } = await generateCommitMessageWithBugAnalysis(
       includedChanges.map((c) => ({
         path: c.path,
         status: c.status,
@@ -73,8 +72,30 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
       })),
       currentBranch
     );
+    spinner.stop("Analysis complete");
 
-    spinner.stop("Commit message generated");
+    // Display warnings if critical bugs found
+    if (bugs.length > 0) {
+      const bugList = bugs
+        .map((bug) => `  ⚠️  ${bug.file}\n     ${bug.description}\n     Severity: ${bug.severity}`)
+        .join("\n\n");
+      
+      p.note(
+        `⚠️  CRITICAL BUGS DETECTED:\n\n${bugList}\n\n⚠️  Please review these issues before committing!`,
+        "⚠️  WARNING"
+      );
+
+      // Always require explicit confirmation for critical bugs, even with autoYes
+      const continueWithBugs = await p.confirm({
+        message: "Critical bugs detected! Do you still want to continue with the commit?",
+        initialValue: false,
+      });
+
+      if (p.isCancel(continueWithBugs) || !continueWithBugs) {
+        p.cancel("Commit cancelled due to critical bugs");
+        return null;
+      }
+    }
 
     // Display the generated message
     p.note(commitMessage, "Suggested commit message");
