@@ -226,7 +226,6 @@ async function createGitHubPR(title: string, description: string, currentBranch:
 
   // Check if branch is pushed
   spinner.start("Checking if branch is pushed...");
-  spinner.start("Checking if branch is pushed...");
   const isPushed = await isBranchPushed();
 
   if (!isPushed) {
