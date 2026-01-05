@@ -14,6 +14,7 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - Stages and commits changes with AI-generated message
   - Pushes to origin
   - Creates GitHub Pull Request automatically
+  - YOLO mode: auto-merge PR and delete branch after merge
   - Perfect for quick fixes and features
 
 - **Commit Generator**: Analyzes your staged changes and generates meaningful commit messages using AI
@@ -34,6 +35,19 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - Branch comparison with base branch
   - Copy to clipboard functionality
   - Direct GitHub PR creation with token management
+
+- **Release Creator**: Automates GitHub releases with AI
+  - Analyzes commits since last release
+  - Determines semantic version bump (major/minor/patch)
+  - Generates comprehensive release notes
+  - Creates GitHub release with changelog
+  - Tags the release automatically
+
+- **Branch Cleanup**: Clean up merged branches
+  - Finds local branches merged into remote
+  - Safe deletion with confirmation
+  - Prevents deletion of current branch and protected branches
+  - Keeps your repository organized
 
 ## Quick Installation
 
@@ -69,11 +83,22 @@ Configuration is stored in `~/.config/git-ai/config.json`:
 ```json
 {
   "openaiApiKey": "sk-your-api-key-here",
+  "githubToken": "ghp-your-github-token-here",
   "model": "gpt-5.2",
   "temperature": 1,
   "reasoningEffort": "low"
 }
 ```
+
+### GitHub Token (Optional)
+
+To enable GitHub PR creation and releases, configure a GitHub token:
+
+1. Generate a token at: https://github.com/settings/tokens
+2. Required scopes: `repo` (for private repos) or `public_repo` (for public repos only)
+3. Add to config via `git-ai settings` or set `GITHUB_TOKEN` environment variable
+
+The tool will fall back to prompting you for a token when needed if not configured.
 
 ### Configure Interactively
 
@@ -98,6 +123,7 @@ This allows you to:
 | `reasoningEffort` | Reasoning depth | `low` | `none`, `low`, `medium`, `high`, `xhigh` |
 | `temperature` | Creativity vs consistency | `1` | `0.0` - `2.0` |
 | `openaiApiKey` | Your OpenAI API key | - | `sk-...` |
+| `githubToken` | GitHub token for PR/release features | - | `ghp-...` or `GITHUB_TOKEN` env var |
 
 ### Available Models
 
@@ -152,14 +178,17 @@ git-ai
 ### Direct Commands
 Run specific commands directly:
 ```bash
-git-ai auto      # Smart workflow (recommended)
-git-ai auto -y   # Auto mode with all prompts auto-accepted (blind mode)
-git-ai branch    # Create branch from changes
-git-ai commit    # Generate commit message
-git-ai pr        # Generate PR suggestion
-git-ai settings  # Configure settings
-git-ai --help    # Show help
-git-ai --version # Show version
+git-ai auto         # Smart workflow (recommended)
+git-ai auto -y      # Auto mode with all prompts auto-accepted (blind mode)
+git-ai auto --yolo  # YOLO mode: auto-merge PR and delete branch
+git-ai branch       # Create branch from changes
+git-ai commit       # Generate commit message
+git-ai pr           # Generate PR suggestion
+git-ai release      # Create a GitHub release
+git-ai cleanup      # Delete local branches merged in remote
+git-ai settings     # Configure settings
+git-ai --help       # Show help
+git-ai --version    # Show version
 ```
 
 ### Commands
@@ -174,6 +203,9 @@ git-ai auto
 # Or use blind mode to auto-accept all prompts
 git-ai auto -y
 git-ai auto --yes
+
+# Or use YOLO mode for maximum automation
+git-ai auto --yolo
 ```
 
 **What it does:**
@@ -188,6 +220,13 @@ git-ai auto --yes
 - Perfect for CI/CD pipelines or when you trust the AI completely
 - Still shows all generated content (branch names, commit messages, PR descriptions)
 - Skips PR creation if GitHub token is not configured
+
+**YOLO Mode (`--yolo` flag):**
+- Enables blind mode automatically (implies `-y`)
+- Auto-merges the created PR after creation
+- Deletes the feature branch after successful merge
+- Maximum automation for rapid deployments
+- Use with caution - no confirmation prompts!
 
 Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
 
@@ -223,7 +262,39 @@ Generates PR title and description from your branch commits:
 git-ai pr
 ```
 
-The tool can also create the GitHub PR directly if you have a `GITHUB_TOKEN` configured.
+The tool can also create the GitHub PR directly if you have a GitHub token configured.
+
+#### Release
+Creates a GitHub release with AI-generated release notes:
+```bash
+# Make sure you're on the main branch with commits
+# Create a release
+git-ai release
+```
+
+**What it does:**
+1. Analyzes all commits since the last release/tag
+2. Determines appropriate semantic version bump (major, minor, or patch)
+3. Generates comprehensive release notes with AI
+4. Creates a new Git tag
+5. Publishes the release to GitHub
+
+Requires a GitHub token to be configured.
+
+#### Cleanup
+Cleans up local branches that have been merged in the remote:
+```bash
+# Delete merged branches
+git-ai cleanup
+```
+
+**What it does:**
+1. Finds all local branches that are fully merged into the remote main/master branch
+2. Shows you the list of branches to be deleted
+3. Confirms before deletion
+4. Safely deletes merged branches
+
+Protected branches (main, master, develop, staging) are never deleted.
 
 ## Development
 
