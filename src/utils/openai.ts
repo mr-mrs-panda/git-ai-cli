@@ -353,3 +353,132 @@ DESCRIPTION: <one sentence description>`;
 
   return { name, type, description };
 }
+
+/**
+ * Suggest version bump type based on commits
+ */
+export async function suggestVersionBump(
+  commits: Array<{ message: string }>
+): Promise<{ type: "major" | "minor" | "patch"; reason: string }> {
+  const config = await loadConfig();
+  const client = await getOpenAIClient();
+
+  const commitsText = commits.map((c) => `- ${c.message}`).join("\n");
+
+  const prompt = `You are an expert at semantic versioning (semver). Analyze the following commits and suggest the appropriate version bump type.
+
+Commits:
+${commitsText}
+
+Semver Rules:
+- MAJOR (x.0.0): Breaking changes, incompatible API changes, major refactors that break existing functionality
+- MINOR (0.x.0): New features, backwards-compatible functionality additions
+- PATCH (0.0.x): Bug fixes, small improvements, documentation updates, chores
+
+Keywords to look for:
+- MAJOR: "BREAKING CHANGE", "breaking:", major refactor, API changes, remove deprecated features
+- MINOR: "feat:", "feature:", new functionality, new endpoints, new commands
+- PATCH: "fix:", "bugfix:", "chore:", "docs:", "style:", "refactor:" (non-breaking), "test:"
+
+Analyze the commits and determine the highest priority version bump needed.
+
+RESPOND WITH VALID JSON ONLY:
+{
+  "type": "major" | "minor" | "patch",
+  "reason": "Brief explanation why this version bump is appropriate"
+}`;
+
+  const response = await client.chat.completions.create({
+    model: config.model || "gpt-5.2",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.3,
+    reasoning_effort: "none",
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+
+  if (!content) {
+    throw new Error("Failed to suggest version bump");
+  }
+
+  try {
+    const result = JSON.parse(content);
+    const type = result.type;
+    const reason = result.reason || "No reason provided";
+
+    // Validate type
+    if (!["major", "minor", "patch"].includes(type)) {
+      return { type: "patch", reason: "Could not determine version bump type" };
+    }
+
+    return { type, reason };
+  } catch (error) {
+    console.error("Failed to parse version bump suggestion:", content);
+    return { type: "patch", reason: "Could not determine version bump type" };
+  }
+}
+
+/**
+ * Generate release notes from commits
+ */
+export async function generateReleaseNotes(
+  version: string,
+  commits: Array<{ message: string; author: string; date: string }>
+): Promise<{ title: string; notes: string }> {
+  const config = await loadConfig();
+  const client = await getOpenAIClient();
+
+  const commitsText = commits
+    .map((c) => `- ${c.message} (by ${c.author})`)
+    .join("\n");
+
+  const prompt = `You are an expert at writing clear, professional release notes.
+
+Analyze the following commits and generate release notes for version ${version}.
+
+Commits since last release:
+${commitsText}
+
+Rules:
+- Title should be the version number with a brief theme (e.g., "v1.2.0 - Performance Improvements")
+- Notes should be organized by category:
+  * 🚀 Features (new functionality)
+  * 🐛 Bug Fixes (fixes and corrections)
+  * 🔧 Changes (refactoring, updates, improvements)
+  * 📚 Documentation (docs changes)
+  * 🧹 Chores (maintenance, dependencies)
+- Use bullet points for each change
+- Be concise and clear
+- Use markdown formatting
+- Focus on user-facing changes
+- Group related changes together
+
+Generate the response in the following format:
+TITLE: <version theme here>
+
+NOTES:
+<your release notes here in markdown>`;
+
+  const response = await client.chat.completions.create({
+    model: config.model || "gpt-5.2",
+    messages: [{ role: "user", content: prompt }],
+    temperature: config.temperature || 1,
+    reasoning_effort: config.reasoningEffort || "low",
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+
+  if (!content) {
+    throw new Error("Failed to generate release notes");
+  }
+
+  // Parse the response
+  const titleMatch = content.match(/TITLE:\s*(.+?)(?:\n|$)/);
+  const notesMatch = content.match(/NOTES:\s*([\s\S]+)$/);
+
+  const title = titleMatch?.[1]?.trim() || version;
+  const notes = notesMatch?.[1]?.trim() || content;
+
+  return { title, notes };
+}
