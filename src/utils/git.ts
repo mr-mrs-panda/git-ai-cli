@@ -633,3 +633,132 @@ export async function pullBranch(): Promise<void> {
     throw new Error(error || "Failed to pull from origin");
   }
 }
+
+/**
+ * Get the latest version tag (v*.*.*)
+ * Returns null if no version tags exist
+ */
+export async function getLatestVersionTag(): Promise<string | null> {
+  try {
+    const proc = Bun.spawn(["git", "tag", "-l", "v*", "--sort=-version:refname"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return null;
+    }
+
+    const output = await new Response(proc.stdout).text();
+    const tags = output.trim().split("\n").filter(Boolean);
+
+    return tags[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse version from tag (e.g., "v1.2.3" → { major: 1, minor: 2, patch: 3 })
+ */
+export function parseVersion(tag: string): { major: number; minor: number; patch: number } | null {
+  const match = tag.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return null;
+
+  return {
+    major: parseInt(match[1] ?? "0", 10),
+    minor: parseInt(match[2] ?? "0", 10),
+    patch: parseInt(match[3] ?? "0", 10),
+  };
+}
+
+/**
+ * Increment version based on type
+ */
+export function incrementVersion(
+  version: { major: number; minor: number; patch: number },
+  type: "major" | "minor" | "patch"
+): { major: number; minor: number; patch: number } {
+  if (type === "major") {
+    return { major: version.major + 1, minor: 0, patch: 0 };
+  } else if (type === "minor") {
+    return { major: version.major, minor: version.minor + 1, patch: 0 };
+  } else {
+    return { major: version.major, minor: version.minor, patch: version.patch + 1 };
+  }
+}
+
+/**
+ * Format version to tag string (e.g., { major: 1, minor: 2, patch: 3 } → "v1.2.3")
+ */
+export function formatVersionTag(version: { major: number; minor: number; patch: number }): string {
+  return `v${version.major}.${version.minor}.${version.patch}`;
+}
+
+/**
+ * Create a git tag
+ */
+export async function createTag(tag: string, message: string): Promise<void> {
+  const proc = Bun.spawn(["git", "tag", "-a", tag, "-m", message], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to create tag '${tag}'`);
+  }
+}
+
+/**
+ * Push tags to origin
+ */
+export async function pushTags(): Promise<void> {
+  const proc = Bun.spawn(["git", "push", "--tags"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to push tags");
+  }
+}
+
+/**
+ * Get commits since a specific tag
+ */
+export async function getCommitsSinceTag(tag: string): Promise<GitCommit[]> {
+  try {
+    const formatString = "%H|%s|%an|%ai";
+    const proc = Bun.spawn(["git", "log", `${tag}..HEAD`, `--pretty=format:${formatString}`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return [];
+    }
+
+    const logOutput = await new Response(proc.stdout).text();
+
+    if (!logOutput.trim()) {
+      return [];
+    }
+
+    return logOutput
+      .trim()
+      .split("\n")
+      .map((line) => {
+        const [hash, message, author, date] = line.split("|");
+        return { hash: hash ?? "", message: message ?? "", author: author ?? "", date: date ?? "" };
+      })
+      .filter((commit) => commit.hash && commit.message);
+  } catch {
+    return [];
+  }
+}
