@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import { Octokit } from "octokit";
-import { getBranchInfo, isGitRepository, isGitHubRepository, parseGitHubRepo, isBranchPushed, pushToOrigin, getBaseBranch } from "../utils/git.ts";
+import { getBranchInfo, isGitRepository, isGitHubRepository, parseGitHubRepo, isBranchPushed, pushToOrigin, getBaseBranch, getCurrentBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
 
 export interface PrSuggestOptions {
@@ -14,6 +14,48 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
   const isRepo = await isGitRepository();
   if (!isRepo) {
     throw new Error("Not a git repository. Please run this command in a git repository.");
+  }
+
+  // Check if we're on the main/master branch
+  {
+    const currentBranch = await getCurrentBranch();
+    const baseBranch = await getBaseBranch();
+
+    if (currentBranch === baseBranch) {
+      p.note(
+        `You are currently on the '${baseBranch}' branch.\n` +
+        "Pull requests should be created from feature branches, not from the main branch.",
+        "On main branch"
+      );
+
+      let shouldCreateBranch = autoYes;
+
+      if (!autoYes) {
+        const response = await p.confirm({
+          message: "Would you like to create a new branch first?",
+          initialValue: true,
+        });
+
+        if (p.isCancel(response)) {
+          p.cancel("PR creation cancelled");
+          return;
+        }
+
+        shouldCreateBranch = response;
+      } else {
+        p.log.info("Auto-accepting: Creating a new branch");
+      }
+
+      if (!shouldCreateBranch) {
+        p.note("Please create a feature branch before creating a PR.", "Info");
+        return;
+      }
+
+      // Import and use branch creation logic
+      const { createBranch } = await import("./create-branch.ts");
+      await createBranch();
+      // Continue with PR creation flow after branch is created
+    }
   }
 
   // Check for unstaged/uncommitted changes
