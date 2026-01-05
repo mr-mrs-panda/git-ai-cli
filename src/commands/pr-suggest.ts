@@ -137,74 +137,112 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
     "Branch info"
   );
 
-  // Generate PR suggestion
+  // Generate PR suggestion with feedback loop
   spinner.start("Generating PR title and description with AI...");
 
+  let title: string = "";
+  let description: string = "";
+  let userFeedback: string | undefined;
+  let continueLoop = true;
+
   try {
-    const { title, description } = await generatePRSuggestion(
-      currentBranch,
-      commits.map((c) => ({ message: c.message }))
-    );
-
-    spinner.stop("PR suggestion generated");
-
-    // Display the generated PR info
-    p.note(title, "Suggested PR Title");
-    p.note(description, "Suggested PR Description");
-
-    // Check if this is a GitHub repository
-    const isGitHub = await isGitHubRepository();
-
-    // In autoYes mode, create PR if GitHub, otherwise just show
-    let action: string;
-    if (autoYes) {
-      if (isGitHub) {
-        p.log.info("Auto-accepting: Creating GitHub Pull Request");
-        action = "create-pr";
-      } else {
-        p.log.info("Not a GitHub repository, displaying suggestion only");
-        action = "nothing";
-      }
-    } else {
-      // Prepare action options
-      const options: Array<{ value: string; label: string }> = [];
-
-      if (isGitHub) {
-        options.push({ value: "create-pr", label: "Create GitHub Pull Request" });
-      }
-
-      options.push(
-        { value: "copy-title", label: "Copy title to clipboard" },
-        { value: "copy-desc", label: "Copy description to clipboard" },
-        { value: "copy-both", label: "Copy both (formatted)" },
-        { value: "nothing", label: "Nothing, just show me" }
+    while (continueLoop) {
+      // Generate PR suggestion
+      const result = await generatePRSuggestion(
+        currentBranch,
+        commits.map((c) => ({ message: c.message })),
+        userFeedback
       );
 
-      // Ask if user wants to copy
-      const selectedAction = await p.select({
-        message: "What would you like to do?",
-        options,
-      });
+      title = result.title;
+      description = result.description;
 
-      if (p.isCancel(selectedAction)) {
-        return;
+      spinner.stop("PR suggestion generated");
+
+      // Display the generated PR info
+      p.note(title, "Suggested PR Title");
+      p.note(description, "Suggested PR Description");
+
+      // Check if this is a GitHub repository
+      const isGitHub = await isGitHubRepository();
+
+      // In autoYes mode, create PR if GitHub, otherwise just show
+      let action: string;
+      if (autoYes) {
+        if (isGitHub) {
+          p.log.info("Auto-accepting: Creating GitHub Pull Request");
+          action = "create-pr";
+        } else {
+          p.log.info("Not a GitHub repository, displaying suggestion only");
+          action = "nothing";
+        }
+        continueLoop = false;
+      } else {
+        // Prepare action options
+        const options: Array<{ value: string; label: string }> = [];
+
+        if (isGitHub) {
+          options.push({ value: "create-pr", label: "Create GitHub Pull Request" });
+        }
+
+        options.push(
+          { value: "regenerate", label: "Regenerate with feedback" },
+          { value: "copy-title", label: "Copy title to clipboard" },
+          { value: "copy-desc", label: "Copy description to clipboard" },
+          { value: "copy-both", label: "Copy both (formatted)" },
+          { value: "nothing", label: "Nothing, just show me" }
+        );
+
+        // Ask if user wants to copy
+        const selectedAction = await p.select({
+          message: "What would you like to do?",
+          options,
+        });
+
+        if (p.isCancel(selectedAction)) {
+          return;
+        }
+
+        action = selectedAction as string;
       }
 
-      action = selectedAction as string;
-    }
+      if (action === "regenerate") {
+        // Ask for feedback
+        const feedback = await p.text({
+          message: "What would you like to change? (e.g., 'The title should mention performance improvements')",
+          placeholder: "Provide feedback here...",
+          validate: (value) => {
+            if (!value || value.trim().length === 0) return "Feedback is required";
+          },
+        });
 
-    if (action === "create-pr") {
-      await createGitHubPR(title, description, currentBranch, autoYes);
-    } else if (action === "copy-title") {
-      await copyToClipboard(title);
-      p.note("Title copied to clipboard!", "Success");
-    } else if (action === "copy-desc") {
-      await copyToClipboard(description);
-      p.note("Description copied to clipboard!", "Success");
-    } else if (action === "copy-both") {
-      const combined = `${title}\n\n${description}`;
-      await copyToClipboard(combined);
-      p.note("Title and description copied to clipboard!", "Success");
+        if (p.isCancel(feedback)) {
+          return;
+        }
+
+        userFeedback = feedback as string;
+        spinner.start("Regenerating PR with your feedback...");
+        // Continue the loop
+      } else if (action === "create-pr") {
+        await createGitHubPR(title, description, currentBranch, autoYes);
+        continueLoop = false;
+      } else if (action === "copy-title") {
+        await copyToClipboard(title);
+        p.note("Title copied to clipboard!", "Success");
+        continueLoop = false;
+      } else if (action === "copy-desc") {
+        await copyToClipboard(description);
+        p.note("Description copied to clipboard!", "Success");
+        continueLoop = false;
+      } else if (action === "copy-both") {
+        const combined = `${title}\n\n${description}`;
+        await copyToClipboard(combined);
+        p.note("Title and description copied to clipboard!", "Success");
+        continueLoop = false;
+      } else {
+        // "nothing" selected
+        continueLoop = false;
+      }
     }
   } catch (error) {
     spinner.stop("Failed to generate PR suggestion");

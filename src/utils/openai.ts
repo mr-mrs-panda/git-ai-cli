@@ -218,12 +218,20 @@ IMPORTANT: Generate ONLY the commit message. If the changes are simple, a header
  */
 export async function generatePRSuggestion(
   branchName: string,
-  commits: Array<{ message: string }>
+  commits: Array<{ message: string }>,
+  feedback?: string
 ): Promise<{ title: string; description: string }> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
 
   const commitsText = commits.map((c, i) => `${i + 1}. ${c.message}`).join("\n");
+
+  const feedbackSection = feedback
+    ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
+${feedback}
+
+IMPORTANT: Address the user's feedback and regenerate the PR title and description accordingly.\n`
+    : '';
 
   const prompt = `You are an expert at writing clear, professional pull request titles and descriptions.
 
@@ -232,7 +240,7 @@ Analyze the following information and generate a PR title and description.
 Branch name: ${branchName}
 
 Commits:
-${commitsText}
+${commitsText}${feedbackSection}
 
 Rules:
 - Title should be clear, concise, and descriptive (max 72 characters)
