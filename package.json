@@ -1,15 +1,38 @@
 {
   "name": "git-ai-cli",
   "version": "1.0.0",
+  "description": "AI-powered Git commit message generator and PR suggestion tool built with Bun",
+  "author": "pandapknaepel",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mr-mrs-panda/git-ai-cli.git"
+  },
+  "homepage": "https://github.com/mr-mrs-panda/git-ai-cli#readme",
+  "bugs": {
+    "url": "https://github.com/mr-mrs-panda/git-ai-cli/issues"
+  },
+  "keywords": [
+    "git",
+    "ai",
+    "commit",
+    "openai",
+    "gpt",
+    "cli",
+    "pull-request",
+    "automation",
+    "developer-tools",
+    "bun"
+  ],
   "module": "index.ts",
   "type": "module",
-  "private": true,
   "bin": {
     "git-ai": "./src/cli.ts"
   },
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "build": "bun build src/cli.ts --compile --outfile git-ai"
+    "build": "bun build src/cli.ts --compile --outfile git-ai",
+    "test": "bun test"
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",
@@ -21,5 +44,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.3.4"
   }
 }

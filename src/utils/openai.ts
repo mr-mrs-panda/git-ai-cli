@@ -350,10 +350,6 @@ DESCRIPTION: <one sentence description>`;
     throw new Error("Failed to generate branch name");
   }
 
-  // Debug: log the raw response
-  console.log("[DEBUG] AI Response for branch name:");
-  console.log(content);
-  console.log("[DEBUG] End of response\n");
 
   // Parse the response - try different patterns
   let typeMatch = content.match(/TYPE:\s*(feature|bugfix|chore|refactor)/i);

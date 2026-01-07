@@ -18,7 +18,7 @@ Usage:
   git-ai [command]
 
 Commands:
-  auto     Smart workflow: branch → commit → push → PR (recommended)
+  auto     Smart workflow: branch → commit → push → PR
   branch   Analyze changes and suggest a branch name
   commit   Generate AI-powered commit message from staged changes
   pr       Generate PR title and description from branch commits
@@ -37,7 +37,7 @@ Options:
 
 Examples:
   git-ai              # Interactive mode
-  git-ai auto         # Smart workflow (recommended for quick changes)
+  git-ai auto         # Smart workflow
   git-ai auto -y      # Auto mode with all prompts auto-accepted
   git-ai auto --yolo  # YOLO mode: auto-merge PR and delete branch
   git-ai auto --release  # Full release workflow: commit → PR → merge → release
@@ -115,7 +115,7 @@ async function runInteractive(): Promise<string> {
     options: [
       {
         value: "auto",
-        label: "auto: Smart workflow (recommended)",
+        label: "auto: Smart workflow",
         hint: "branch → commit → push → PR",
       },
       {

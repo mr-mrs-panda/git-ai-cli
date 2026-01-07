@@ -8,7 +8,7 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
 
 ## Features
 
-- **🚀 Auto Mode (Recommended)**: Intelligent end-to-end workflow for quick changes
+- **🚀 Auto Mode**: Intelligent end-to-end workflow for quick changes
   - Analyzes your current state and determines what needs to be done
   - If on main/master: creates a new branch based on your changes
   - Stages and commits changes with AI-generated message
@@ -180,7 +180,7 @@ git-ai
 ### Direct Commands
 Run specific commands directly:
 ```bash
-git-ai auto            # Smart workflow (recommended)
+git-ai auto            # Smart workflow
 git-ai auto -y         # Auto mode with all prompts auto-accepted (blind mode)
 git-ai auto --yolo     # YOLO mode: auto-merge PR and delete branch
 git-ai auto --release  # Release mode: full workflow + merge + release
@@ -197,7 +197,7 @@ git-ai --version       # Show version
 
 ### Commands
 
-#### Auto Mode (Recommended)
+#### Auto Mode
 The intelligent workflow that handles everything for you:
 ```bash
 # Make your changes
@@ -371,3 +371,12 @@ The uninstaller will:
 - [OpenAI API](https://platform.openai.com/) - OpenAI API for AI generation
 - [@clack/prompts](https://github.com/natemoo-re/clack) - Modern CLI prompts
 - TypeScript - Type-safe development
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
