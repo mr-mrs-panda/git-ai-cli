@@ -6,9 +6,7 @@
 
 AI-powered Git commit message generator and PR suggestion tool built with Bun.
 
-<p align="center">
-  <video src="https://github.com/mr-mrs-panda/git-ai-cli/raw/refs/heads/main/assets/demo.webm" autoplay loop muted playsinline width="800"></video>
-</p>
+<video src="assets/demo.webm" width="320" height="240" controls></video>
 
 ## Features
 
