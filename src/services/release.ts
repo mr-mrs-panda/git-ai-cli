@@ -15,12 +15,14 @@ import {
   pushTags,
   hasUnstagedChanges,
 } from "../utils/git.ts";
-import { generateReleaseNotes, suggestVersionBump } from "../utils/openai.ts";
+import { generateReleaseNotes, suggestVersionBump, type PRInfo } from "../utils/openai.ts";
 import { getGitHubToken } from "../utils/config.ts";
+import { getMergedPRsSinceTag } from "./github.ts";
 
 export interface ReleaseOptions {
   autoYes?: boolean;
   versionType?: "major" | "minor" | "patch";
+  includePRs?: boolean;
 }
 
 export interface ReleaseResult {
@@ -32,7 +34,7 @@ export interface ReleaseResult {
  * Create a GitHub release with AI-generated release notes
  */
 export async function createRelease(options: ReleaseOptions = {}): Promise<ReleaseResult | null> {
-  const { autoYes = false, versionType } = options;
+  const { autoYes = false, versionType, includePRs = false } = options;
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -59,6 +61,22 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
   }
 
   const spinner = p.spinner();
+
+  // Try to get PR info if GitHub is available (default behavior)
+  // Can be disabled with includePRs: false
+  let pullRequests: PRInfo[] = [];
+  let repoInfo: { owner: string; repo: string } | null = null;
+  let githubToken: string | null = null;
+
+  // Check if we should try to fetch PRs (default: true if not explicitly disabled)
+  const shouldFetchPRs = includePRs !== false;
+
+  if (shouldFetchPRs) {
+    githubToken = await getGitHubToken();
+    if (githubToken) {
+      repoInfo = await parseGitHubRepo();
+    }
+  }
 
   // Get the latest version tag
   spinner.start("Finding latest version tag...");
@@ -89,6 +107,26 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
 
     spinner.stop(`Found ${commits.length} commit(s) since ${latestTag}`);
 
+    // Fetch PRs if we have token/repo info (default behavior when GitHub is available)
+    if (shouldFetchPRs && githubToken && repoInfo) {
+      spinner.start("Fetching merged PRs since last release...");
+      try {
+        pullRequests = await getMergedPRsSinceTag(
+          latestTag,
+          repoInfo.owner,
+          repoInfo.repo,
+          githubToken
+        );
+        if (pullRequests.length > 0) {
+          spinner.stop(`Found ${pullRequests.length} merged PR(s) since ${latestTag}`);
+        } else {
+          spinner.stop("No merged PRs found since last release");
+        }
+      } catch {
+        spinner.stop("Could not fetch PRs, continuing with commits only");
+      }
+    }
+
     // Ask AI for version bump suggestion
     let bumpType: "major" | "minor" | "patch";
 
@@ -103,7 +141,8 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
 
       try {
         suggestion = await suggestVersionBump(
-          commits.map((c) => ({ message: c.message }))
+          commits.map((c) => ({ message: c.message })),
+          pullRequests.length > 0 ? pullRequests : undefined
         );
         spinner.stop("AI suggestion received");
       } catch (error) {
@@ -219,6 +258,21 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
     );
   }
 
+  // Show PRs summary if available
+  if (pullRequests.length > 0) {
+    p.note(
+      [
+        `PRs included in ${newVersionTag}:`,
+        "",
+        ...pullRequests.slice(0, 10).map((pr) => `  • #${pr.number}: ${pr.title}`),
+        pullRequests.length > 10 ? `  ... and ${pullRequests.length - 10} more` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      "Pull Requests"
+    );
+  }
+
   // Generate release notes with AI
   spinner.start("Generating release notes with AI...");
 
@@ -228,7 +282,8 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
   try {
     const result = await generateReleaseNotes(
       newVersionTag,
-      commits.map((c) => ({ message: c.message, author: c.author, date: c.date }))
+      commits.map((c) => ({ message: c.message, author: c.author, date: c.date })),
+      pullRequests.length > 0 ? pullRequests : undefined
     );
     releaseTitle = result.title;
     releaseNotes = result.notes;
@@ -301,8 +356,10 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
   // Create GitHub release
   spinner.start("Creating GitHub release...");
 
-  // Get GitHub token
-  let githubToken = await getGitHubToken();
+  // Get GitHub token (may already have it from PR fetch)
+  if (!githubToken) {
+    githubToken = await getGitHubToken();
+  }
 
   if (!githubToken) {
     spinner.stop("GitHub token missing");
@@ -345,8 +402,10 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
     githubToken = token;
   }
 
-  // Parse GitHub repo info
-  const repoInfo = await parseGitHubRepo();
+  // Parse GitHub repo info (may already have it from PR fetch)
+  if (!repoInfo) {
+    repoInfo = await parseGitHubRepo();
+  }
 
   if (!repoInfo) {
     spinner.stop("Failed to parse repository");

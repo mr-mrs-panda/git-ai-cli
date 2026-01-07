@@ -1,11 +1,19 @@
 import * as p from "@clack/prompts";
 import { Octokit } from "octokit";
 import { getGitHubToken, updateConfig } from "../utils/config.ts";
-import { parseGitHubRepo, pushToOrigin, isBranchPushed } from "../utils/git.ts";
+import { parseGitHubRepo, pushToOrigin, isBranchPushed, getTagDate } from "../utils/git.ts";
 
 export interface GitHubRepoInfo {
   owner: string;
   repo: string;
+}
+
+export interface PRInfo {
+  number: number;
+  title: string;
+  body: string | null;
+  labels: string[];
+  mergedAt: string;
 }
 
 /**
@@ -227,5 +235,68 @@ export async function createGitHubPullRequest(params: {
     spinner.stop("Failed to create Pull Request");
     const message = error.response?.data?.message || error.message || String(error);
     throw new Error(`Could not create PR: ${message}`);
+  }
+}
+
+/**
+ * Get merged PRs since a specific tag
+ *
+ * @param tag - The tag to compare against
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param githubToken - GitHub personal access token
+ * @returns Array of merged PRs or empty array if failed
+ */
+export async function getMergedPRsSinceTag(
+  tag: string,
+  owner: string,
+  repo: string,
+  githubToken: string
+): Promise<PRInfo[]> {
+  try {
+    const tagDate = await getTagDate(tag);
+
+    if (!tagDate) {
+      return [];
+    }
+
+    const octokit = new Octokit({ auth: githubToken });
+
+    // Get closed PRs, sorted by updated date
+    const { data: prs } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      state: "closed",
+      sort: "updated",
+      direction: "desc",
+      per_page: 100,
+    });
+
+    // Filter to only merged PRs that were merged after the tag date
+    const mergedPRs: PRInfo[] = [];
+
+    for (const pr of prs) {
+      if (!pr.merged_at) continue;
+
+      const mergedAt = new Date(pr.merged_at);
+
+      // Only include PRs merged after the tag date
+      if (mergedAt > tagDate) {
+        mergedPRs.push({
+          number: pr.number,
+          title: pr.title,
+          body: pr.body,
+          labels: pr.labels
+            .map((label) => (typeof label === "object" && label !== null ? label.name : String(label)))
+            .filter((name): name is string => Boolean(name)),
+          mergedAt: pr.merged_at,
+        });
+      }
+    }
+
+    return mergedPRs;
+  } catch {
+    // Silently fail and return empty array
+    return [];
   }
 }

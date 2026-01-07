@@ -384,20 +384,55 @@ DESCRIPTION: <one sentence description>`;
 }
 
 /**
- * Suggest version bump type based on commits
+ * PR information for release analysis
+ */
+export interface PRInfo {
+  number: number;
+  title: string;
+  body: string | null;
+  labels: string[];
+  mergedAt: string;
+}
+
+/**
+ * Suggest version bump type based on commits and optionally PRs
  */
 export async function suggestVersionBump(
-  commits: Array<{ message: string }>
+  commits: Array<{ message: string }>,
+  pullRequests?: PRInfo[]
 ): Promise<{ type: "major" | "minor" | "patch"; reason: string }> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
 
   const commitsText = commits.map((c) => `- ${c.message}`).join("\n");
 
-  const prompt = `You are an expert at semantic versioning (semver). Analyze the following commits and suggest the appropriate version bump type.
+  let prsText = "";
+  let labelsHint = "";
+
+  if (pullRequests && pullRequests.length > 0) {
+    prsText = `\n\nPull Requests merged since last release:\n${pullRequests
+      .map((pr) => {
+        let prLine = `- #${pr.number}: ${pr.title}`;
+        if (pr.labels.length > 0) {
+          prLine += ` [${pr.labels.join(", ")}]`;
+        }
+        return prLine;
+      })
+      .join("\n")}`;
+
+    // Check for significant labels
+    const allLabels = pullRequests.flatMap((pr) => pr.labels.map((l) => l.toLowerCase()));
+    if (allLabels.some((l) => l.includes("breaking") || l.includes("major"))) {
+      labelsHint = "\n\nNote: Some PRs have 'breaking' or 'major' labels - consider a MAJOR bump.";
+    } else if (allLabels.some((l) => l.includes("enhancement") || l.includes("feature"))) {
+      labelsHint = "\n\nNote: Some PRs have 'enhancement' or 'feature' labels - consider at least a MINOR bump.";
+    }
+  }
+
+  const prompt = `You are an expert at semantic versioning (semver). Analyze the following commits${pullRequests && pullRequests.length > 0 ? " and pull requests" : ""} and suggest the appropriate version bump type.
 
 Commits:
-${commitsText}
+${commitsText}${prsText}${labelsHint}
 
 Semver Rules:
 - MAJOR (x.0.0): Breaking changes, incompatible API changes, major refactors that break existing functionality
@@ -409,7 +444,7 @@ Keywords to look for:
 - MINOR: "feat:", "feature:", new functionality, new endpoints, new commands
 - PATCH: "fix:", "bugfix:", "chore:", "docs:", "style:", "refactor:" (non-breaking), "test:"
 
-Analyze the commits and determine the highest priority version bump needed.
+Analyze the commits${pullRequests && pullRequests.length > 0 ? " and PR information" : ""} and determine the highest priority version bump needed.
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -449,11 +484,12 @@ RESPOND WITH VALID JSON ONLY:
 }
 
 /**
- * Generate release notes from commits
+ * Generate release notes from commits and optionally PRs
  */
 export async function generateReleaseNotes(
   version: string,
-  commits: Array<{ message: string; author: string; date: string }>
+  commits: Array<{ message: string; author: string; date: string }>,
+  pullRequests?: PRInfo[]
 ): Promise<{ title: string; notes: string }> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
@@ -462,12 +498,32 @@ export async function generateReleaseNotes(
     .map((c) => `- ${c.message} (by ${c.author})`)
     .join("\n");
 
+  let prsText = "";
+  if (pullRequests && pullRequests.length > 0) {
+    prsText = `\n\nPull Requests merged since last release:\n${pullRequests
+      .map((pr) => {
+        let prEntry = `- #${pr.number}: ${pr.title}`;
+        if (pr.labels.length > 0) {
+          prEntry += ` [${pr.labels.join(", ")}]`;
+        }
+        if (pr.body) {
+          // Truncate long PR bodies
+          const truncatedBody = pr.body.length > 500
+            ? pr.body.substring(0, 500) + "..."
+            : pr.body;
+          prEntry += `\n  Description: ${truncatedBody.replace(/\n/g, "\n  ")}`;
+        }
+        return prEntry;
+      })
+      .join("\n\n")}`;
+  }
+
   const prompt = `You are an expert at writing clear, professional release notes.
 
-Analyze the following commits and generate release notes for version ${version}.
+Analyze the following commits${pullRequests && pullRequests.length > 0 ? " and pull requests" : ""} and generate release notes for version ${version}.
 
 Commits since last release:
-${commitsText}
+${commitsText}${prsText}
 
 Rules:
 - Title should be the version number with a brief theme (e.g., "v1.2.0 - Performance Improvements")
@@ -482,6 +538,7 @@ Rules:
 - Use markdown formatting
 - Focus on user-facing changes
 - Group related changes together
+${pullRequests && pullRequests.length > 0 ? "- Use PR titles and descriptions for better context on changes\n- Reference PR numbers where relevant (e.g., #123)" : ""}
 
 Generate the response in the following format:
 TITLE: <version theme here>

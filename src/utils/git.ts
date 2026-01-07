@@ -859,3 +859,32 @@ export async function getCommitsSinceTag(tag: string): Promise<GitCommit[]> {
     return [];
   }
 }
+
+/**
+ * Get the date of a specific tag
+ */
+export async function getTagDate(tag: string): Promise<Date | null> {
+  try {
+    const proc = Bun.spawn(["git", "log", "-1", "--format=%aI", tag], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return null;
+    }
+
+    const dateOutput = await new Response(proc.stdout).text();
+    const trimmed = dateOutput.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    return new Date(trimmed);
+  } catch {
+    return null;
+  }
+}
+
