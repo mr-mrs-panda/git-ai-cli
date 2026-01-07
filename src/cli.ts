@@ -50,7 +50,7 @@ Examples:
   git-ai settings     # Configure settings
 
 Documentation:
-  https://github.com/yourusername/git-ai-cli
+  https://github.com/mr-mrs-panda/git-ai-cli
 `);
 }
 
