@@ -6,7 +6,7 @@
 
 AI-powered Git commit message generator and PR suggestion tool built with Bun.
 
-<video src="assets/demo.webm" width="320" height="240" controls></video>
+[demo.webm](https://github.com/user-attachments/assets/84d26b0c-3c78-45eb-8e0e-5fef7b0b7a44)
 
 ## Features
 
