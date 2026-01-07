@@ -147,23 +147,8 @@ async function createPullRequest(
   spinner.stop(`Found ${branchInfo.commits.length} commit(s)`);
 
   // Get code diffs for better PR description
-  let diffs: Array<{ path: string; status: string; diff: string }> = [];
-  try {
-    spinner.start("Analyzing code changes...");
-    const { getBranchDiffs } = await import("../utils/git.ts");
-    const allDiffs = await getBranchDiffs(baseBranch);
-
-    // Filter out skipped files
-    diffs = allDiffs
-      .filter((d) => !d.skipped)
-      .map((d) => ({ path: d.path, status: d.status, diff: d.diff }));
-
-    spinner.stop(`Found ${diffs.length} file(s) with changes`);
-  } catch (error) {
-    // Gracefully degrade if diff retrieval fails
-    spinner.stop("Could not analyze diffs, using commits only");
-    diffs = [];
-  }
+  const { getBranchDiffsForPR } = await import("../services/pr.ts");
+  const { diffs } = await getBranchDiffsForPR(baseBranch, spinner);
 
   // Generate PR title and description
   spinner.start("Generating PR title and description with AI...");
@@ -191,116 +176,40 @@ async function createPullRequest(
     p.log.info("Auto-accepting: Creating PR with generated title and description");
   }
 
-  // Check for GitHub token
-  let githubToken = await getGitHubToken();
+  // Use GitHub services for PR creation
+  const { ensureGitHubToken, getGitHubRepoInfo, createGitHubPullRequest } = await import("../services/github.ts");
 
+  const githubToken = await ensureGitHubToken(autoYes);
   if (!githubToken) {
-    if (autoYes) {
-      p.note(
-        "GitHub personal access token is required to create pull requests.\n" +
-        "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
-        "GitHub Token Missing"
-      );
-      return {};
-    }
-
-    p.note(
-      "GitHub personal access token is required to create pull requests.\n" +
-      "You can create one at: https://github.com/settings/tokens\n\n" +
-      "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)",
-      "GitHub Token Required"
-    );
-
-    const token = await p.text({
-      message: "Enter your GitHub personal access token:",
-      placeholder: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      validate: (value) => {
-        if (!value || value.length === 0) return "Token is required";
-        if (!value.startsWith("ghp_") && !value.startsWith("github_pat_")) {
-          return "Token should start with 'ghp_' or 'github_pat_'";
-        }
-      },
-    });
-
-    if (p.isCancel(token)) {
-      p.cancel("PR creation cancelled");
-      return {};
-    }
-
-    spinner.start("Saving GitHub token...");
-    await updateConfig({ githubToken: token });
-    spinner.stop("GitHub token saved");
-
-    githubToken = token;
+    return {};
   }
 
   // Get repo info
-  spinner.start("Getting repository information...");
-  const repoInfo = await parseGitHubRepo();
-
+  const repoInfo = await getGitHubRepoInfo(spinner);
   if (!repoInfo) {
-    spinner.stop("Failed to parse repository");
     throw new Error("Could not parse GitHub repository information");
   }
 
   const { owner, repo } = repoInfo;
-  spinner.stop(`Repository: ${owner}/${repo}`);
 
   // Create PR
-  spinner.start("Creating Pull Request...");
-  try {
-    const octokit = new Octokit({ auth: githubToken });
+  const prResult = await createGitHubPullRequest({
+    title,
+    description,
+    currentBranch: workingBranch,
+    baseBranch,
+    owner,
+    repo,
+    githubToken,
+    autoYes,
+  });
 
-    // Check if PR already exists
-    const { data: existingPRs } = await octokit.rest.pulls.list({
-      owner,
-      repo,
-      head: `${owner}:${workingBranch}`,
-      state: "open",
-    });
-
-    if (existingPRs && existingPRs.length > 0 && existingPRs[0]) {
-      spinner.stop("Pull Request already exists");
-      const pr = existingPRs[0];
-      p.note(
-        `A pull request for this branch already exists: #${pr.number}\n${pr.html_url}`,
-        "PR Already Exists"
-      );
-
-      // If yolo mode and PR exists, merge it
-      if (yolo) {
-        return { prNumber: pr.number, owner, repo };
-      }
-
-      return {};
-    }
-
-    // Create new PR
-    const { data } = await octokit.rest.pulls.create({
-      owner,
-      repo,
-      title,
-      body: description,
-      head: workingBranch,
-      base: baseBranch,
-    });
-
-    spinner.stop("Pull Request created successfully!");
-
-    p.note(
-      `Title: ${data.title}\n` +
-      `URL: ${data.html_url}\n` +
-      `Number: #${data.number}`,
-      "Pull Request Created"
-    );
-
-    // Return PR info for potential merging
-    return { prNumber: data.number, owner, repo };
-  } catch (error: any) {
-    spinner.stop("Failed to create Pull Request");
-    const message = error.response?.data?.message || error.message || String(error);
-    throw new Error(`Could not create PR: ${message}`);
+  if (!prResult) {
+    return {};
   }
+
+  // Return PR info for potential merging (YOLO mode)
+  return { prNumber: prResult.number, owner, repo };
 }
 
 /**
