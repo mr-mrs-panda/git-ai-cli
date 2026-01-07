@@ -1,6 +1,8 @@
-# Git AI CLI - Development Guide
+# CLAUDE.md
 
-This guide is for Claude Code instances working on the Git AI CLI codebase.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+# Git AI CLI - Development Guide
 
 ## Project Overview
 
@@ -99,13 +101,16 @@ Utils (git, OpenAI, config operations)
 src/
 ├── commands/           # User-facing CLI commands
 │   ├── auto.ts        # Auto mode workflow
-│   ├── auto-commit.ts # Commit message generation
+│   ├── commit.ts      # Commit message generation
 │   ├── create-branch.ts # Branch creation
 │   ├── pr-suggest.ts  # PR title/description generation
+│   ├── release.ts     # GitHub release creation
+│   ├── cleanup.ts     # Delete merged branches
 │   └── settings.ts    # Configuration management
 ├── services/          # Reusable business logic
 │   ├── branch.ts      # Branch name analysis
-│   └── commit.ts      # Commit generation logic
+│   ├── commit.ts      # Commit generation logic
+│   └── release.ts     # Release notes generation and version bumping
 └── utils/             # Low-level operations
     ├── config.ts      # Config file management
     ├── git.ts         # Git operations
@@ -116,7 +121,39 @@ src/
 
 ## Critical Technical Patterns
 
-### 1. Git Commands - Use Bun.spawn(), NOT template literals
+### 1. Command Options Pattern - Auto-Yes Flag
+
+All commands accept an `autoYes` option for automation and CI/CD usage:
+
+```typescript
+export interface CommandOptions {
+  autoYes?: boolean;  // Skip confirmations, auto-accept prompts
+}
+
+export async function myCommand(options: CommandOptions = {}): Promise<void> {
+  const { autoYes = false } = options;
+
+  // For confirmation prompts
+  if (!autoYes) {
+    const response = await p.confirm({
+      message: "Proceed with action?",
+      initialValue: true,
+    });
+    if (p.isCancel(response) || !response) {
+      p.cancel("Operation cancelled");
+      process.exit(0);
+    }
+  } else {
+    p.log.info("Auto-accepting: Proceeding with action");
+  }
+
+  // Action happens here
+}
+```
+
+**Why:** This pattern enables both interactive and automated workflows. The `-y`/`--yes` flag is parsed in `src/cli.ts` and passed to all commands.
+
+### 2. Git Commands - Use Bun.spawn(), NOT template literals
 
 **❌ WRONG - Breaks with git format strings:**
 ```typescript
@@ -136,7 +173,7 @@ const output = await new Response(proc.stdout).text();
 
 **Why:** Bun's `$` template literal performs shell interpolation, treating git format placeholders as commands. Always use `Bun.spawn()` with array arguments for git commands.
 
-### 2. Git Status Parsing - Position-Sensitive Format
+### 3. Git Status Parsing - Position-Sensitive Format
 
 **❌ WRONG - Breaks position parsing:**
 ```typescript
@@ -162,7 +199,7 @@ const workTreeStatus = line[1];
 
 **Why:** Git's porcelain format is position-sensitive. The first character represents index status, the second represents working tree status. Using `.trim()` removes leading spaces and shifts positions, breaking the parser.
 
-### 3. Spinner State Management
+### 4. Spinner State Management
 
 **❌ WRONG - Creates new spinner mid-operation:**
 ```typescript
@@ -182,7 +219,7 @@ spinner.stop("Done!");
 
 **Why:** Starting a new spinner kills the previous one. Use `.message()` to update the running spinner's text.
 
-### 4. Git Output During Spinner
+### 5. Git Output During Spinner
 
 **❌ WRONG - Git output interferes with spinner:**
 ```typescript
@@ -204,7 +241,7 @@ spinner.stop("Done!");
 
 **Why:** When git commands output directly to console (stdout: "inherit"), they interfere with the spinner's rendering. Always pipe output during spinner operations.
 
-### 5. OpenAI Reasoning Output
+### 6. OpenAI Reasoning Output
 
 **Problem:** When `reasoning_effort` is set to "low"/"medium"/"high", the AI includes reasoning text before the actual response, breaking regex parsers.
 
@@ -266,6 +303,27 @@ const suggestion = await analyzeBranchName();
 // suggestion = { name: "feature/add-authentication", type: "feature", description: "..." }
 ```
 
+### [/src/services/release.ts](src/services/release.ts)
+
+**`createRelease(options)`**
+- Validates repository state (must be on base branch, no uncommitted changes)
+- Analyzes commits since last version tag
+- Uses AI to suggest version bump type (major/minor/patch)
+- Generates release title and notes via OpenAI
+- Creates git tag and pushes to origin
+- Creates GitHub release (if GitHub remote exists)
+- Returns `ReleaseResult | null`
+
+**Usage:**
+```typescript
+const { createRelease } = await import("../services/release.ts");
+const result = await createRelease({
+  autoYes: false,
+  versionType: "minor", // Optional: skip AI suggestion
+});
+// result = { version: "v1.2.0", releaseUrl: "https://github.com/..." }
+```
+
 ---
 
 ## Common Workflows
@@ -277,6 +335,26 @@ const suggestion = await analyzeBranchName();
 4. Generate and commit with AI
 5. Push to origin (set upstream if needed)
 6. Create GitHub PR (if GitHub remote exists)
+7. If YOLO mode: auto-merge PR and delete feature branch
+
+### Cleanup Command Flow
+1. Optionally switch to base branch (main/master)
+2. Fetch from origin to get latest remote state
+3. Find local branches that are merged into `origin/base`
+4. Filter out current branch and protected branches (main, master, develop, staging)
+5. Only consider branches that exist on remote (preserves local-only branches)
+6. Optionally delete merged remote branches from origin
+7. Delete local merged branches with confirmation
+
+### Release Command Flow
+1. Validate on base branch with no uncommitted changes
+2. Find latest version tag (or start from v0.0.1)
+3. Get commits since last tag
+4. Ask AI to suggest version bump type (major/minor/patch)
+5. Generate release title and notes via AI
+6. Create git tag locally
+7. Push tag to origin
+8. Create GitHub release (if GitHub remote exists)
 
 ### Adding a New Command
 
@@ -325,6 +403,23 @@ await pushToOrigin(true); // true = set upstream
 import { getBranchCommits } from "../utils/git.ts";
 const commits = await getBranchCommits();
 // Returns: Array<{ hash: string, message: string, author: string, date: string }>
+
+// Get commits since a tag
+import { getCommitsSinceTag } from "../utils/git.ts";
+const commits = await getCommitsSinceTag("v1.0.0");
+// Returns: Array<{ hash: string, message: string, author: string, date: string }>
+
+// Get latest version tag
+import { getLatestVersionTag } from "../utils/git.ts";
+const tag = await getLatestVersionTag();
+// Returns: "v1.2.3" or null
+
+// Branch operations for cleanup
+import { getLocalBranches, branchExistsOnRemote, isBranchMerged, deleteLocalBranch } from "../utils/git.ts";
+const branches = await getLocalBranches(); // Returns: string[]
+const exists = await branchExistsOnRemote("feature/my-branch"); // Returns: boolean
+const merged = await isBranchMerged("feature/my-branch", "origin/main"); // Returns: boolean
+await deleteLocalBranch("feature/my-branch"); // Deletes local branch
 ```
 
 ---
