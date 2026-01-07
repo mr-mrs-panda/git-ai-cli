@@ -32,6 +32,7 @@ Options:
   -v, --version  Show version
   -y, --yes      Auto-accept all prompts (blind mode)
   --yolo         YOLO mode: auto-merge PR and delete branch (implies -y)
+  --release      Release mode: auto workflow + merge + release (implies --yolo)
   --no-prs       Disable fetching PR info for release notes (PRs are included by default)
 
 Examples:
@@ -39,6 +40,7 @@ Examples:
   git-ai auto         # Smart workflow (recommended for quick changes)
   git-ai auto -y      # Auto mode with all prompts auto-accepted
   git-ai auto --yolo  # YOLO mode: auto-merge PR and delete branch
+  git-ai auto --release  # Full release workflow: commit → PR → merge → release
   git-ai branch       # Create branch from changes
   git-ai commit       # Generate commit message
   git-ai pr           # Generate PR suggestion
@@ -175,6 +177,7 @@ async function main(): Promise<void> {
   // Check for yes and yolo flags
   const yesFlag = args.includes("-y") || args.includes("--yes");
   const yoloFlag = args.includes("--yolo");
+  const releaseFlag = args.includes("--release");
   const noPRsFlag = args.includes("--no-prs");
 
   // Filter out flags to get the command
@@ -205,7 +208,7 @@ async function main(): Promise<void> {
   // Execute the command
   try {
     if (action === "auto") {
-      await auto({ autoYes: yesFlag, yolo: yoloFlag });
+      await auto({ autoYes: yesFlag, yolo: yoloFlag, release: releaseFlag });
     } else if (action === "branch") {
       await createBranch({ autoYes: yesFlag });
     } else if (action === "commit") {

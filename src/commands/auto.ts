@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges, switchToBranch, pullBranch } from "../utils/git.ts";
+import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges, switchToBranch, pullBranch, fetchOrigin } from "../utils/git.ts";
 import { analyzeBranchName } from "../services/branch.ts";
 import { generateAndCommit } from "../services/commit.ts";
 import { getBranchInfo, pushToOrigin, isBranchPushed, isGitHubRepository, prExistsForBranch } from "../utils/git.ts";
@@ -19,6 +19,18 @@ export interface AutoOptions {
    * @default false
    */
   yolo?: boolean;
+  /**
+   * Release mode - after merge, switch to main, pull, and create release (implies yolo)
+   * @default false
+   */
+  release?: boolean;
+}
+
+/**
+ * Helper function to wait for a specified number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -125,6 +137,81 @@ async function mergePRAndDeleteBranch(
 }
 
 /**
+ * Helper function to perform release after merge
+ * Waits for GitHub to process the merge, then switches to base branch, pulls, and creates release
+ */
+async function performReleaseAfterMerge(
+  baseBranch: string,
+  spinner: ReturnType<typeof p.spinner>
+): Promise<void> {
+  // Import release function
+  const { createRelease } = await import("../services/release.ts");
+
+  // Wait for GitHub to process the merge
+  p.log.step("Preparing for release...");
+  spinner.start("Waiting for GitHub to process merge (5 seconds)...");
+  await sleep(5000);
+  spinner.stop("Merge processed");
+
+  // Switch to base branch
+  spinner.start(`Switching to '${baseBranch}'...`);
+  try {
+    await switchToBranch(baseBranch);
+    spinner.stop(`Switched to '${baseBranch}'`);
+  } catch (error) {
+    spinner.stop(`Failed to switch to '${baseBranch}'`);
+    throw new Error(
+      `Could not switch to '${baseBranch}': ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  // Fetch and pull with retry logic
+  spinner.start("Fetching latest changes...");
+  try {
+    await fetchOrigin();
+    spinner.stop("Fetch complete");
+  } catch (error) {
+    spinner.stop("Fetch failed");
+    throw new Error(`Failed to fetch: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // Pull with retry - sometimes the merge takes a moment to propagate
+  let pullSuccess = false;
+  let pullAttempts = 0;
+  const maxPullAttempts = 3;
+
+  while (!pullSuccess && pullAttempts < maxPullAttempts) {
+    pullAttempts++;
+    spinner.start(`Pulling latest changes (attempt ${pullAttempts}/${maxPullAttempts})...`);
+    try {
+      await pullBranch();
+      spinner.stop("Pull complete");
+      pullSuccess = true;
+    } catch (error) {
+      spinner.stop(`Pull attempt ${pullAttempts} failed`);
+      if (pullAttempts < maxPullAttempts) {
+        p.log.warn("Waiting 3 seconds before retry...");
+        await sleep(3000);
+      } else {
+        throw new Error(`Failed to pull after ${maxPullAttempts} attempts: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  // Now create the release
+  p.log.step("Creating Release");
+
+  try {
+    const result = await createRelease({ autoYes: true, includePRs: true });
+    if (result) {
+      p.note(`Release ${result.version} created successfully!${result.releaseUrl ? `\n${result.releaseUrl}` : ""}`, "Release Created");
+    }
+  } catch (error) {
+    throw new Error(`Failed to create release: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * Helper function to create a PR for the current branch
  */
 async function createPullRequest(
@@ -222,9 +309,10 @@ async function createPullRequest(
  * 4. Create PR (if GitHub repo)
  */
 export async function auto(options: AutoOptions = {}): Promise<void> {
-  const { autoYes = false, yolo = false } = options;
-  // YOLO mode implies autoYes
-  const effectiveAutoYes = yolo || autoYes;
+  const { autoYes = false, yolo = false, release = false } = options;
+  // Release mode implies yolo, yolo implies autoYes
+  const effectiveYolo = release || yolo;
+  const effectiveAutoYes = effectiveYolo || autoYes;
   const spinner = p.spinner();
 
   // Check if we're in a git repository
@@ -302,8 +390,13 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
           const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, yolo);
 
           // If yolo mode, merge the PR and delete the branch
-          if (yolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
+          if (effectiveYolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
             await mergePRAndDeleteBranch(prInfo.prNumber, prInfo.owner, prInfo.repo, workingBranch, spinner);
+
+            // If release mode, wait and then create release
+            if (release) {
+              await performReleaseAfterMerge(baseBranch, spinner);
+            }
           }
 
           return;
@@ -480,11 +573,17 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   }
 
   // Use the helper function to create the PR
-  const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, yolo);
+  const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo);
 
   // If yolo mode, merge the PR and delete the branch
-  if (yolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
+  if (effectiveYolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
     await mergePRAndDeleteBranch(prInfo.prNumber, prInfo.owner, prInfo.repo, workingBranch, spinner);
+
+    // If release mode, wait and then create release
+    if (release) {
+      await performReleaseAfterMerge(baseBranch, spinner);
+      return; // Skip checkoutAndPullBase since performReleaseAfterMerge handles it
+    }
   }
 
   // Final step: Checkout to base branch and pull latest changes
