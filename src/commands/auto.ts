@@ -387,7 +387,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
         if (shouldCreatePR) {
           // Jump directly to PR creation
           p.log.step("Creating Pull Request");
-          const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, yolo);
+          const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo);
 
           // If yolo mode, merge the PR and delete the branch
           if (effectiveYolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
