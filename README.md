@@ -38,8 +38,10 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
 
 - **Release Creator**: Automates GitHub releases with AI
   - Analyzes commits since last release
-  - Determines semantic version bump (major/minor/patch)
-  - Generates comprehensive release notes
+  - Fetches merged PR titles and descriptions for richer context
+  - Determines semantic version bump (major/minor/patch) using commits and PR labels
+  - Generates comprehensive release notes with PR references
+  - Automatically switches to main/master and pulls latest changes
   - Creates GitHub release with changelog
   - Tags the release automatically
 
@@ -178,17 +180,19 @@ git-ai
 ### Direct Commands
 Run specific commands directly:
 ```bash
-git-ai auto         # Smart workflow (recommended)
-git-ai auto -y      # Auto mode with all prompts auto-accepted (blind mode)
-git-ai auto --yolo  # YOLO mode: auto-merge PR and delete branch
-git-ai branch       # Create branch from changes
-git-ai commit       # Generate commit message
-git-ai pr           # Generate PR suggestion
-git-ai release      # Create a GitHub release
-git-ai cleanup      # Delete local branches merged in remote
-git-ai settings     # Configure settings
-git-ai --help       # Show help
-git-ai --version    # Show version
+git-ai auto            # Smart workflow (recommended)
+git-ai auto -y         # Auto mode with all prompts auto-accepted (blind mode)
+git-ai auto --yolo     # YOLO mode: auto-merge PR and delete branch
+git-ai auto --release  # Release mode: full workflow + merge + release
+git-ai branch          # Create branch from changes
+git-ai commit          # Generate commit message
+git-ai pr              # Generate PR suggestion
+git-ai release         # Create a GitHub release (includes PRs by default)
+git-ai release --no-prs  # Create release without PR info
+git-ai cleanup         # Delete local branches merged in remote
+git-ai settings        # Configure settings
+git-ai --help          # Show help
+git-ai --version       # Show version
 ```
 
 ### Commands
@@ -206,6 +210,9 @@ git-ai auto --yes
 
 # Or use YOLO mode for maximum automation
 git-ai auto --yolo
+
+# Or use Release mode for full release workflow
+git-ai auto --release
 ```
 
 **What it does:**
@@ -227,6 +234,13 @@ git-ai auto --yolo
 - Deletes the feature branch after successful merge
 - Maximum automation for rapid deployments
 - Use with caution - no confirmation prompts!
+
+**Release Mode (`--release` flag):**
+- Enables YOLO mode automatically (implies `--yolo`)
+- After PR merge, waits for GitHub to process
+- Switches to main/master and pulls latest changes
+- Automatically creates a new release with AI-generated notes
+- Perfect for quick hotfixes that need immediate release
 
 Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
 
@@ -267,17 +281,31 @@ The tool can also create the GitHub PR directly if you have a GitHub token confi
 #### Release
 Creates a GitHub release with AI-generated release notes:
 ```bash
-# Make sure you're on the main branch with commits
-# Create a release
+# Create a release (can be run from any branch)
 git-ai release
+
+# Create release without PR information
+git-ai release --no-prs
+
+# Auto-accept all prompts (uses AI-suggested version)
+git-ai release -y
 ```
 
 **What it does:**
-1. Analyzes all commits since the last release/tag
-2. Determines appropriate semantic version bump (major, minor, or patch)
-3. Generates comprehensive release notes with AI
-4. Creates a new Git tag
-5. Publishes the release to GitHub
+1. Switches to main/master branch if not already there
+2. Pulls latest changes from origin
+3. Analyzes all commits since the last release/tag
+4. Fetches merged PRs for richer context (if GitHub token available)
+5. Determines appropriate semantic version bump (major, minor, or patch)
+6. Generates comprehensive release notes with AI (including PR references)
+7. Creates a new Git tag
+8. Publishes the release to GitHub
+
+**PR Integration (default):**
+- Automatically fetches merged PRs since last release
+- Uses PR titles and descriptions for better release notes
+- Considers PR labels (e.g., `breaking-change`, `enhancement`) for version bump
+- Can be disabled with `--no-prs` flag
 
 Requires a GitHub token to be configured.
 

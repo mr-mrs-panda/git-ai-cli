@@ -100,7 +100,7 @@ Utils (git, OpenAI, config operations)
 ```
 src/
 ├── commands/           # User-facing CLI commands
-│   ├── auto.ts        # Auto mode workflow
+│   ├── auto.ts        # Auto mode workflow (includes release mode)
 │   ├── commit.ts      # Commit message generation
 │   ├── create-branch.ts # Branch creation
 │   ├── pr-suggest.ts  # PR title/description generation
@@ -110,6 +110,8 @@ src/
 ├── services/          # Reusable business logic
 │   ├── branch.ts      # Branch name analysis
 │   ├── commit.ts      # Commit generation logic
+│   ├── github.ts      # GitHub API operations (PRs, tokens, repo info)
+│   ├── pr.ts          # PR diff analysis
 │   └── release.ts     # Release notes generation and version bumping
 └── utils/             # Low-level operations
     ├── config.ts      # Config file management
@@ -126,12 +128,17 @@ src/
 All commands accept an `autoYes` option for automation and CI/CD usage:
 
 ```typescript
-export interface CommandOptions {
+export interface AutoOptions {
   autoYes?: boolean;  // Skip confirmations, auto-accept prompts
+  yolo?: boolean;     // Auto-merge PR and delete branch (implies autoYes)
+  release?: boolean;  // Full release workflow after merge (implies yolo)
 }
 
 export async function myCommand(options: CommandOptions = {}): Promise<void> {
-  const { autoYes = false } = options;
+  const { autoYes = false, yolo = false, release = false } = options;
+  // Release implies yolo, yolo implies autoYes
+  const effectiveYolo = release || yolo;
+  const effectiveAutoYes = effectiveYolo || autoYes;
 
   // For confirmation prompts
   if (!autoYes) {
@@ -306,10 +313,13 @@ const suggestion = await analyzeBranchName();
 ### [/src/services/release.ts](src/services/release.ts)
 
 **`createRelease(options)`**
-- Validates repository state (must be on base branch, no uncommitted changes)
+- Switches to base branch if not already there
+- Fetches and pulls latest changes from origin
+- Validates repository state (no uncommitted changes)
 - Analyzes commits since last version tag
-- Uses AI to suggest version bump type (major/minor/patch)
-- Generates release title and notes via OpenAI
+- Fetches merged PRs for richer context (if GitHub token available)
+- Uses AI to suggest version bump type (major/minor/patch), considering PR labels
+- Generates release title and notes via OpenAI (with PR references)
 - Creates git tag and pushes to origin
 - Creates GitHub release (if GitHub remote exists)
 - Returns `ReleaseResult | null`
@@ -319,7 +329,8 @@ const suggestion = await analyzeBranchName();
 const { createRelease } = await import("../services/release.ts");
 const result = await createRelease({
   autoYes: false,
-  versionType: "minor", // Optional: skip AI suggestion
+  versionType: "minor",  // Optional: skip AI suggestion
+  includePRs: true,      // Default: true, fetch PR info for release notes
 });
 // result = { version: "v1.2.0", releaseUrl: "https://github.com/..." }
 ```
@@ -336,6 +347,7 @@ const result = await createRelease({
 5. Push to origin (set upstream if needed)
 6. Create GitHub PR (if GitHub remote exists)
 7. If YOLO mode: auto-merge PR and delete feature branch
+8. If Release mode: wait for GitHub → switch to main → pull → create release
 
 ### Cleanup Command Flow
 1. Optionally switch to base branch (main/master)
@@ -347,14 +359,17 @@ const result = await createRelease({
 7. Delete local merged branches with confirmation
 
 ### Release Command Flow
-1. Validate on base branch with no uncommitted changes
-2. Find latest version tag (or start from v0.0.1)
-3. Get commits since last tag
-4. Ask AI to suggest version bump type (major/minor/patch)
-5. Generate release title and notes via AI
-6. Create git tag locally
-7. Push tag to origin
-8. Create GitHub release (if GitHub remote exists)
+1. Switch to base branch if not already there
+2. Fetch and pull latest changes from origin
+3. Validate no uncommitted changes
+4. Find latest version tag (or start from v0.0.1)
+5. Get commits since last tag
+6. Fetch merged PRs since last tag (if GitHub token available)
+7. Ask AI to suggest version bump type (considering commits and PR labels)
+8. Generate release title and notes via AI (with PR references)
+9. Create git tag locally
+10. Push tag to origin
+11. Create GitHub release (if GitHub remote exists)
 
 ### Adding a New Command
 
@@ -409,10 +424,21 @@ import { getCommitsSinceTag } from "../utils/git.ts";
 const commits = await getCommitsSinceTag("v1.0.0");
 // Returns: Array<{ hash: string, message: string, author: string, date: string }>
 
+// Get tag date
+import { getTagDate } from "../utils/git.ts";
+const date = await getTagDate("v1.0.0");
+// Returns: Date | null
+
 // Get latest version tag
 import { getLatestVersionTag } from "../utils/git.ts";
 const tag = await getLatestVersionTag();
 // Returns: "v1.2.3" or null
+
+// Switch branch and pull
+import { switchToBranch, fetchOrigin, pullBranch } from "../utils/git.ts";
+await switchToBranch("main");
+await fetchOrigin();
+await pullBranch();
 
 // Branch operations for cleanup
 import { getLocalBranches, branchExistsOnRemote, isBranchMerged, deleteLocalBranch } from "../utils/git.ts";
@@ -420,6 +446,25 @@ const branches = await getLocalBranches(); // Returns: string[]
 const exists = await branchExistsOnRemote("feature/my-branch"); // Returns: boolean
 const merged = await isBranchMerged("feature/my-branch", "origin/main"); // Returns: boolean
 await deleteLocalBranch("feature/my-branch"); // Deletes local branch
+```
+
+### GitHub Service Operations
+
+```typescript
+// Get merged PRs since a tag (for release notes)
+import { getMergedPRsSinceTag } from "../services/github.ts";
+const prs = await getMergedPRsSinceTag("v1.0.0", "owner", "repo", githubToken);
+// Returns: Array<{ number, title, body, labels: string[], mergedAt }>
+
+// Ensure GitHub token is available
+import { ensureGitHubToken } from "../services/github.ts";
+const token = await ensureGitHubToken(autoYes);
+// Returns: string | null (prompts user if not configured and !autoYes)
+
+// Get repository info
+import { getGitHubRepoInfo } from "../services/github.ts";
+const info = await getGitHubRepoInfo();
+// Returns: { owner: string, repo: string } | null
 ```
 
 ---
