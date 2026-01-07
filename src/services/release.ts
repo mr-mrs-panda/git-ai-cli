@@ -14,6 +14,9 @@ import {
   createTag,
   pushTags,
   hasUnstagedChanges,
+  switchToBranch,
+  fetchOrigin,
+  pullBranch,
 } from "../utils/git.ts";
 import { generateReleaseNotes, suggestVersionBump, type PRInfo } from "../utils/openai.ts";
 import { getGitHubToken } from "../utils/config.ts";
@@ -50,17 +53,37 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
     );
   }
 
-  // Check if we're on the base branch (main/master)
-  const currentBranch = await getCurrentBranch();
+  const spinner = p.spinner();
+
+  // Check if we're on the base branch (main/master), switch if not
+  let currentBranch = await getCurrentBranch();
   const baseBranch = await getBaseBranch();
 
   if (currentBranch !== baseBranch) {
-    throw new Error(
-      `You must be on the '${baseBranch}' branch to create a release. Currently on '${currentBranch}'.`
-    );
+    spinner.start(`Switching to '${baseBranch}' branch...`);
+    try {
+      await switchToBranch(baseBranch);
+      currentBranch = baseBranch;
+      spinner.stop(`Switched to '${baseBranch}'`);
+    } catch (error) {
+      spinner.stop(`Failed to switch to '${baseBranch}'`);
+      throw new Error(
+        `Could not switch to '${baseBranch}' branch: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
-  const spinner = p.spinner();
+  // Fetch and pull latest changes
+  spinner.start(`Updating '${baseBranch}' branch...`);
+  try {
+    await fetchOrigin();
+    await pullBranch();
+    spinner.stop(`'${baseBranch}' branch is up to date`);
+  } catch (error) {
+    spinner.stop(`Warning: Could not update '${baseBranch}'`);
+    // Continue anyway - might be offline or no remote
+    p.log.warn(`Could not pull latest changes: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   // Try to get PR info if GitHub is available (default behavior)
   // Can be disabled with includePRs: false
@@ -156,83 +179,91 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
       const minorVersion = incrementVersion(parsedVersion, "minor");
       const majorVersion = incrementVersion(parsedVersion, "major");
 
-      // Show AI suggestion
-      p.note(
-        `Suggested: ${suggestion.type.toUpperCase()}\nReason: ${suggestion.reason}`,
-        "AI Suggestion"
-      );
-
-      // Offer options with AI suggestion as default
-      const options: Array<{ value: string; label: string; hint?: string }> = [];
-
-      // Put suggested option first
-      if (suggestion.type === "major") {
-        options.push(
-          {
-            value: "major",
-            label: `major (${latestTag} → v${majorVersion.major}.${majorVersion.minor}.${majorVersion.patch}) - Recommended by AI`,
-            hint: "Breaking changes",
-          },
-          {
-            value: "minor",
-            label: `minor (${latestTag} → v${minorVersion.major}.${minorVersion.minor}.${minorVersion.patch})`,
-            hint: "New features (backwards compatible)",
-          },
-          {
-            value: "patch",
-            label: `patch (${latestTag} → v${patchVersion.major}.${patchVersion.minor}.${patchVersion.patch})`,
-            hint: "Bug fixes and small changes",
-          }
-        );
-      } else if (suggestion.type === "minor") {
-        options.push(
-          {
-            value: "minor",
-            label: `minor (${latestTag} → v${minorVersion.major}.${minorVersion.minor}.${minorVersion.patch}) - Recommended by AI`,
-            hint: "New features (backwards compatible)",
-          },
-          {
-            value: "patch",
-            label: `patch (${latestTag} → v${patchVersion.major}.${patchVersion.minor}.${patchVersion.patch})`,
-            hint: "Bug fixes and small changes",
-          },
-          {
-            value: "major",
-            label: `major (${latestTag} → v${majorVersion.major}.${majorVersion.minor}.${majorVersion.patch})`,
-            hint: "Breaking changes",
-          }
-        );
+      // If autoYes, accept AI suggestion automatically
+      if (autoYes) {
+        bumpType = suggestion.type;
+        const targetVersion = incrementVersion(parsedVersion, bumpType);
+        p.log.info(`Auto-accepting AI suggestion: ${bumpType} (${latestTag} → v${targetVersion.major}.${targetVersion.minor}.${targetVersion.patch})`);
+        p.log.info(`Reason: ${suggestion.reason}`);
       } else {
-        options.push(
-          {
-            value: "patch",
-            label: `patch (${latestTag} → v${patchVersion.major}.${patchVersion.minor}.${patchVersion.patch}) - Recommended by AI`,
-            hint: "Bug fixes and small changes",
-          },
-          {
-            value: "minor",
-            label: `minor (${latestTag} → v${minorVersion.major}.${minorVersion.minor}.${minorVersion.patch})`,
-            hint: "New features (backwards compatible)",
-          },
-          {
-            value: "major",
-            label: `major (${latestTag} → v${majorVersion.major}.${majorVersion.minor}.${majorVersion.patch})`,
-            hint: "Breaking changes",
-          }
+        // Show AI suggestion
+        p.note(
+          `Suggested: ${suggestion.type.toUpperCase()}\nReason: ${suggestion.reason}`,
+          "AI Suggestion"
         );
+
+        // Offer options with AI suggestion as default
+        const options: Array<{ value: string; label: string; hint?: string }> = [];
+
+        // Put suggested option first
+        if (suggestion.type === "major") {
+          options.push(
+            {
+              value: "major",
+              label: `major (${latestTag} → v${majorVersion.major}.${majorVersion.minor}.${majorVersion.patch}) - Recommended by AI`,
+              hint: "Breaking changes",
+            },
+            {
+              value: "minor",
+              label: `minor (${latestTag} → v${minorVersion.major}.${minorVersion.minor}.${minorVersion.patch})`,
+              hint: "New features (backwards compatible)",
+            },
+            {
+              value: "patch",
+              label: `patch (${latestTag} → v${patchVersion.major}.${patchVersion.minor}.${patchVersion.patch})`,
+              hint: "Bug fixes and small changes",
+            }
+          );
+        } else if (suggestion.type === "minor") {
+          options.push(
+            {
+              value: "minor",
+              label: `minor (${latestTag} → v${minorVersion.major}.${minorVersion.minor}.${minorVersion.patch}) - Recommended by AI`,
+              hint: "New features (backwards compatible)",
+            },
+            {
+              value: "patch",
+              label: `patch (${latestTag} → v${patchVersion.major}.${patchVersion.minor}.${patchVersion.patch})`,
+              hint: "Bug fixes and small changes",
+            },
+            {
+              value: "major",
+              label: `major (${latestTag} → v${majorVersion.major}.${majorVersion.minor}.${majorVersion.patch})`,
+              hint: "Breaking changes",
+            }
+          );
+        } else {
+          options.push(
+            {
+              value: "patch",
+              label: `patch (${latestTag} → v${patchVersion.major}.${patchVersion.minor}.${patchVersion.patch}) - Recommended by AI`,
+              hint: "Bug fixes and small changes",
+            },
+            {
+              value: "minor",
+              label: `minor (${latestTag} → v${minorVersion.major}.${minorVersion.minor}.${minorVersion.patch})`,
+              hint: "New features (backwards compatible)",
+            },
+            {
+              value: "major",
+              label: `major (${latestTag} → v${majorVersion.major}.${majorVersion.minor}.${majorVersion.patch})`,
+              hint: "Breaking changes",
+            }
+          );
+        }
+
+        const response = await p.select({
+          message: "What type of version bump?",
+          options,
+        });
+
+        if (p.isCancel(response)) {
+          p.cancel("Release cancelled");
+          return null;
+        }
+
+        bumpType = response as "major" | "minor" | "patch";
       }
-
-      const response = await p.select({
-        message: "What type of version bump?",
-        options,
-      });
-
-      if (p.isCancel(response)) {
-        p.cancel("Release cancelled");
-        return null;
-      }
-
-      bumpType = response as "major" | "minor" | "patch";
     }
 
     newVersion = incrementVersion(parsedVersion, bumpType);
