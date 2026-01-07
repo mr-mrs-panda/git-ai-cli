@@ -219,12 +219,20 @@ IMPORTANT: Generate ONLY the commit message. If the changes are simple, a header
 export async function generatePRSuggestion(
   branchName: string,
   commits: Array<{ message: string }>,
+  diffs?: Array<{ path: string; status: string; diff: string }>,
   feedback?: string
 ): Promise<{ title: string; description: string }> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
 
   const commitsText = commits.map((c, i) => `${i + 1}. ${c.message}`).join("\n");
+
+  const diffsText = diffs && diffs.length > 0
+    ? "\n\nCode Changes:\n" +
+      diffs.map((d, i) =>
+        `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`
+      ).join("\n")
+    : "";
 
   const feedbackSection = feedback
     ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
@@ -240,22 +248,35 @@ Analyze the following information and generate a PR title and description.
 Branch name: ${branchName}
 
 Commits:
-${commitsText}${feedbackSection}
+${commitsText}${diffsText}${feedbackSection}
 
 Rules:
 - Title should be clear, concise, and descriptive (max 72 characters)
-- Description should include:
-  * Brief summary of changes
-  * Key features or fixes
-  * Any relevant context
-- Use markdown formatting for the description
+- Use commits to understand the high-level changes
+- Use code diffs (if provided) to understand implementation details and technical changes
 - Be professional and specific
+- Focus on WHY the change was made, not just WHAT changed
 
 Generate the response in the following format:
 TITLE: <your title here>
 
 DESCRIPTION:
-<your description here>`;
+## Summary
+[1-2 sentences explaining what this PR does and why]
+
+## Changes
+- [Key change 1]
+- [Key change 2]
+- [Key change 3]
+[List the main changes as bullet points]
+
+## Technical Notes
+[Optional: Only include if there are breaking changes, API changes, new dependencies, or other important technical details. Otherwise omit this section entirely]
+
+IMPORTANT:
+- The description should be ready to use directly in GitHub - do NOT include labels like "PR Description:" or "Title:" in the description itself
+- Only include the markdown content for the description
+- Omit the "Technical Notes" section entirely if there are no breaking changes or important technical details`;
 
   const response = await client.chat.completions.create({
     model: config.model || "gpt-5.2",
