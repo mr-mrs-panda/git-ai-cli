@@ -254,12 +254,6 @@ Rules:
 - Title should be clear, concise, and descriptive (max 72 characters)
 - Use commits to understand the high-level changes
 - Use code diffs (if provided) to understand implementation details and technical changes
-- Description should include:
-  * Brief summary of changes (what problem is solved)
-  * Key features or fixes (what changed)
-  * Technical notes (API changes, breaking changes, new dependencies if applicable)
-  * Any relevant context
-- Use markdown formatting for the description
 - Be professional and specific
 - Focus on WHY the change was made, not just WHAT changed
 
@@ -267,7 +261,22 @@ Generate the response in the following format:
 TITLE: <your title here>
 
 DESCRIPTION:
-<your description here>`;
+## Summary
+[1-2 sentences explaining what this PR does and why]
+
+## Changes
+- [Key change 1]
+- [Key change 2]
+- [Key change 3]
+[List the main changes as bullet points]
+
+## Technical Notes
+[Optional: Only include if there are breaking changes, API changes, new dependencies, or other important technical details. Otherwise omit this section entirely]
+
+IMPORTANT:
+- The description should be ready to use directly in GitHub - do NOT include labels like "PR Description:" or "Title:" in the description itself
+- Only include the markdown content for the description
+- Omit the "Technical Notes" section entirely if there are no breaking changes or important technical details`;
 
   const response = await client.chat.completions.create({
     model: config.model || "gpt-5.2",
