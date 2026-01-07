@@ -111,6 +111,103 @@ export async function getStagedChanges(): Promise<GitFileChange[]> {
 }
 
 /**
+ * Get file changes with diffs for current branch compared to base branch
+ * Similar to getStagedChanges but for branch comparison
+ * Skips files that are too large or are migrations
+ */
+export async function getBranchDiffs(baseBranch?: string): Promise<GitFileChange[]> {
+  const files: GitFileChange[] = [];
+  const base = baseBranch || (await getBaseBranch());
+  const currentBranch = await getCurrentBranch();
+
+  if (currentBranch === base) {
+    return [];
+  }
+
+  try {
+    // Get list of changed files between branches (using three-dot notation)
+    // base...HEAD = changes from merge-base to HEAD (only feature branch changes)
+    const proc = Bun.spawn(
+      ["git", "diff", `${base}...HEAD`, "--name-status"],
+      { stdout: "pipe", stderr: "pipe" }
+    );
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      return [];
+    }
+
+    const statusOutput = await new Response(proc.stdout).text();
+
+    if (!statusOutput.trim()) {
+      return [];
+    }
+
+    const lines = statusOutput.trim().split("\n");
+
+    for (const line of lines) {
+      const [status, ...pathParts] = line.split("\t");
+      const path = pathParts.join("\t");
+
+      if (!status || !path) continue;
+
+      // Check file size and type (reuse existing helper)
+      const fileInfo = await getFileInfo(path, status);
+
+      if (fileInfo.skipped) {
+        files.push({
+          path,
+          status,
+          diff: "",
+          skipped: true,
+          skipReason: fileInfo.skipReason,
+        });
+        continue;
+      }
+
+      // Get diff for this specific file between branches
+      try {
+        const diffProc = Bun.spawn(
+          ["git", "diff", `${base}...HEAD`, "--", path],
+          { stdout: "pipe", stderr: "pipe" }
+        );
+        await diffProc.exited;
+
+        if (diffProc.exitCode === 0) {
+          const diff = await new Response(diffProc.stdout).text();
+          files.push({
+            path,
+            status,
+            diff: diff.trim(),
+            skipped: false,
+          });
+        } else {
+          files.push({
+            path,
+            status,
+            diff: "",
+            skipped: true,
+            skipReason: "Could not read diff",
+          });
+        }
+      } catch {
+        files.push({
+          path,
+          status,
+          diff: "",
+          skipped: true,
+          skipReason: "Could not read diff",
+        });
+      }
+    }
+
+    return files;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Check if file should be skipped based on size or type
  */
 async function getFileInfo(

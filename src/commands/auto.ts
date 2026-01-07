@@ -146,11 +146,31 @@ async function createPullRequest(
 
   spinner.stop(`Found ${branchInfo.commits.length} commit(s)`);
 
+  // Get code diffs for better PR description
+  let diffs: Array<{ path: string; status: string; diff: string }> = [];
+  try {
+    spinner.start("Analyzing code changes...");
+    const { getBranchDiffs } = await import("../utils/git.ts");
+    const allDiffs = await getBranchDiffs(baseBranch);
+
+    // Filter out skipped files
+    diffs = allDiffs
+      .filter((d) => !d.skipped)
+      .map((d) => ({ path: d.path, status: d.status, diff: d.diff }));
+
+    spinner.stop(`Found ${diffs.length} file(s) with changes`);
+  } catch (error) {
+    // Gracefully degrade if diff retrieval fails
+    spinner.stop("Could not analyze diffs, using commits only");
+    diffs = [];
+  }
+
   // Generate PR title and description
   spinner.start("Generating PR title and description with AI...");
   const { title, description } = await generatePRSuggestion(
     workingBranch,
-    branchInfo.commits.map((c) => ({ message: c.message }))
+    branchInfo.commits.map((c) => ({ message: c.message })),
+    diffs.length > 0 ? diffs : undefined
   );
   spinner.stop("PR suggestion generated");
 
