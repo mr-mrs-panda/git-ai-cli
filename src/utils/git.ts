@@ -69,9 +69,15 @@ export async function getStagedChanges(): Promise<GitFileChange[]> {
 
   for (const line of lines) {
     const [status, ...pathParts] = line.split("\t");
-    const path = pathParts.join("\t");
+    
+    if (!status) continue;
 
-    if (!status || !path) continue;
+    // For renames (R) and copies (C), pathParts has [oldPath, newPath]
+    // For other operations, pathParts has [path]
+    // We want the final destination path
+    const path = pathParts[pathParts.length - 1];
+
+    if (!path) continue;
 
     // Check file size
     const fileInfo = await getFileInfo(path, status);

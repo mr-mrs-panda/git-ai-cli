@@ -13,17 +13,18 @@ export interface BranchSuggestion {
  * @returns Branch name suggestion or null if no changes found
  */
 export async function analyzeBranchName(): Promise<BranchSuggestion | null> {
-  // Check if there are any changes at all
+  // Check if there are any changes at all (staged or unstaged)
   const hasUnstaged = await hasUnstagedChanges();
   let stagedChanges = await getStagedChanges();
 
-  // If no staged changes but there are unstaged changes, stage everything
+  // If we have unstaged but no staged changes, stage everything
   if (stagedChanges.length === 0 && hasUnstaged) {
     await stageAllChanges();
     stagedChanges = await getStagedChanges();
   }
 
-  // If still no changes, return null
+  // If we have staged changes or unstaged changes, get all staged for analysis
+  // This ensures we catch both purely staged and unstaged changes
   if (stagedChanges.length === 0) {
     return null;
   }
