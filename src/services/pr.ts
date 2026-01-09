@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { getBranchDiffs } from "../utils/git.ts";
+import { Spinner, type ClackSpinner } from "../utils/ui.ts";
 
 export interface PRDiffResult {
   diffs: Array<{ path: string; status: string; diff: string }>;
@@ -16,7 +17,7 @@ export interface PRDiffResult {
  */
 export async function getBranchDiffsForPR(
   baseBranch: string,
-  spinner?: ReturnType<typeof p.spinner>
+  spinner?: ClackSpinner | Spinner
 ): Promise<PRDiffResult> {
   try {
     if (spinner) {

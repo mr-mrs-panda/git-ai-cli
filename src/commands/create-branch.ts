@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { isGitRepository, getCurrentBranch } from "../utils/git.ts";
 import { analyzeBranchName } from "../services/branch.ts";
+import { Spinner } from "../utils/ui.ts";
 
 export interface CreateBranchOptions {
   autoYes?: boolean;
@@ -14,7 +15,7 @@ export async function createBranch(options: CreateBranchOptions = {}): Promise<v
     throw new Error("Not a git repository. Please run this command in a git repository.");
   }
 
-  const spinner = p.spinner();
+  const spinner = new Spinner();
 
   // Get current branch to show context
   const currentBranch = await getCurrentBranch();

@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { getAllChanges, stageAllChanges, getCurrentBranch } from "../utils/git.ts";
 import { generateCommitMessage } from "../utils/openai.ts";
+import { Spinner, type ClackSpinner } from "../utils/ui.ts";
 
 export interface CommitOptions {
   /**
@@ -12,7 +13,7 @@ export interface CommitOptions {
   /**
    * Custom spinner instance to use for progress updates
    */
-  spinner?: ReturnType<typeof p.spinner>;
+  spinner?: ClackSpinner;
 }
 
 /**
@@ -24,8 +25,7 @@ export interface CommitOptions {
  */
 export async function generateAndCommit(options: CommitOptions = {}): Promise<string | null> {
   const { confirmBeforeCommit = true, spinner: externalSpinner } = options;
-  const spinner = externalSpinner ?? p.spinner();
-  const createdSpinner = !externalSpinner;
+  const spinner = new Spinner(externalSpinner);
 
   try {
     // Stage all changes (including untracked files)
@@ -126,9 +126,7 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
 
     return commitMessage;
   } finally {
-    // Only stop the spinner if we created it
-    if (createdSpinner && spinner) {
-      spinner.stop();
-    }
+    spinner.stopOnFinally();
   }
 }
+

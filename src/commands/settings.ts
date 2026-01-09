@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { loadConfig, updateConfig, getConfigLocation, type Config, type ReasoningEffort } from "../utils/config.ts";
+import { Spinner } from "../utils/ui.ts";
 
 const AVAILABLE_MODELS = [
   { value: "gpt-5.2", label: "GPT-5.2", hint: "Fast on 'none', deep on 'high'" },
@@ -173,7 +174,7 @@ export async function settings(): Promise<void> {
 
     // Save updates
     if (Object.keys(updates).length > 0) {
-      const spinner = p.spinner();
+      const spinner = new Spinner();
       spinner.start("Saving settings...");
 
       await updateConfig(updates);

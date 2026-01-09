@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { getAllChanges, isGitRepository, hasOriginRemote, addOriginRemote, pushToOrigin } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
+import { Spinner } from "../utils/ui.ts";
 
 export interface CommitOptions {
   autoYes?: boolean;
@@ -14,7 +15,7 @@ export async function commit(options: CommitOptions = {}): Promise<void> {
     throw new Error("Not a git repository. Please run this command in a git repository.");
   }
 
-  const spinner = p.spinner();
+  const spinner = new Spinner();
 
   // Get all changes (staged, unstaged, and untracked)
   spinner.start("Analyzing all changes...");
