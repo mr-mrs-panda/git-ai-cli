@@ -7,6 +7,7 @@ import { commit } from "./commands/commit.ts";
 import { prSuggest } from "./commands/pr-suggest.ts";
 import { settings } from "./commands/settings.ts";
 import { cleanup } from "./commands/cleanup.ts";
+import { prepare } from "./commands/prepare.ts";
 import { release } from "./commands/release.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
 
@@ -19,6 +20,7 @@ Usage:
 
 Commands:
   auto     Smart workflow: branch → commit → push → PR
+  prepare  Prepare for a new feature: handle changes, checkout main, and pull
   branch   Analyze changes and suggest a branch name
   commit   Generate AI-powered commit message from staged changes
   pr       Generate PR title and description from branch commits
@@ -41,6 +43,7 @@ Examples:
   git-ai auto -y      # Auto mode with all prompts auto-accepted
   git-ai auto --yolo  # YOLO mode: auto-merge PR and delete branch
   git-ai auto --release  # Full release workflow: commit → PR → merge → release
+  git-ai prepare      # Prepare for a new feature
   git-ai branch       # Create branch from changes
   git-ai commit       # Generate commit message
   git-ai pr           # Generate PR suggestion
@@ -67,7 +70,7 @@ async function ensureApiKey(): Promise<void> {
 
   p.note(
     "OpenAI API key is required to use this tool.\n" +
-      "Get your API key from: https://platform.openai.com/api-keys",
+    "Get your API key from: https://platform.openai.com/api-keys",
     "Setup Required"
   );
 
@@ -98,7 +101,7 @@ async function ensureApiKey(): Promise<void> {
 
   p.note(
     `Your API key has been saved to:\n${getConfigLocation()}\n\n` +
-      "You can update it anytime by editing this file or running the setup again.",
+    "You can update it anytime by editing this file or running the setup again.",
     "Success"
   );
 
@@ -117,6 +120,11 @@ async function runInteractive(): Promise<string> {
         value: "auto",
         label: "auto: Smart workflow",
         hint: "branch → commit → push → PR",
+      },
+      {
+        value: "prepare",
+        label: "prepare: Prepare for new feature",
+        hint: "Handle changes, checkout main, and pull",
       },
       {
         value: "branch",
@@ -190,7 +198,7 @@ async function main(): Promise<void> {
     action = commandArgs[0] as string;
 
     // Validate command
-    if (!["auto", "branch", "commit", "pr", "release", "cleanup", "settings"].includes(action)) {
+    if (!["auto", "branch", "commit", "pr", "release", "cleanup", "prepare", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -200,8 +208,8 @@ async function main(): Promise<void> {
     action = await runInteractive();
   }
 
-  // Ensure API key is configured (skip for settings and cleanup commands)
-  if (action !== "settings" && action !== "cleanup") {
+  // Ensure API key is configured (skip for settings, cleanup and prepare commands)
+  if (action !== "settings" && action !== "cleanup" && action !== "prepare") {
     await ensureApiKey();
   }
 
@@ -209,6 +217,8 @@ async function main(): Promise<void> {
   try {
     if (action === "auto") {
       await auto({ autoYes: yesFlag, yolo: yoloFlag, release: releaseFlag });
+    } else if (action === "prepare") {
+      await prepare({ autoYes: yesFlag });
     } else if (action === "branch") {
       await createBranch({ autoYes: yesFlag });
     } else if (action === "commit") {
