@@ -242,11 +242,10 @@ git-ai auto --release
 - Skips PR creation if GitHub token is not configured
 
 **YOLO Mode (`--yolo` flag):**
-- Enables blind mode automatically (implies `-y`)
 - Auto-merges the created PR after creation
 - Deletes the feature branch after successful merge
 - Maximum automation for rapid deployments
-- Use with caution - no confirmation prompts!
+- Does NOT imply blind mode (combine with `-y` for no prompts)
 
 **Release Mode (`--release` flag):**
 - Enables YOLO mode automatically (implies `--yolo`)
@@ -254,6 +253,7 @@ git-ai auto --release
 - Switches to main/master and pulls latest changes
 - Automatically creates a new release with AI-generated notes
 - Perfect for quick hotfixes that need immediate release
+- Does NOT imply blind mode (combine with `-y` for no prompts)
 
 Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
 

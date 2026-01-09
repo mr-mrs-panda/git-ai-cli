@@ -33,7 +33,7 @@ Options:
   -h, --help     Show this help message
   -v, --version  Show version
   -y, --yes      Auto-accept all prompts (blind mode)
-  --yolo         YOLO mode: auto-merge PR and delete branch (implies -y)
+  --yolo         YOLO mode: auto-merge PR and delete branch
   --release      Release mode: auto workflow + merge + release (implies --yolo)
   --no-prs       Disable fetching PR info for release notes (PRs are included by default)
 
