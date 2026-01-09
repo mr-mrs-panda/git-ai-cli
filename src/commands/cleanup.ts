@@ -14,6 +14,7 @@ import {
   getRemoteMergedBranches,
   deleteRemoteBranch,
 } from "../utils/git.ts";
+import { Spinner } from "../utils/ui.ts";
 
 export interface CleanupOptions {
   autoYes?: boolean;
@@ -28,7 +29,7 @@ export interface CleanupOptions {
  */
 export async function cleanup(options: CleanupOptions = {}): Promise<void> {
   const { autoYes = false } = options;
-  const spinner = p.spinner();
+  const spinner = new Spinner();
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -281,9 +282,9 @@ export async function cleanup(options: CleanupOptions = {}): Promise<void> {
   if (deletedCount > 0 || remoteDeletedCount > 0) {
     p.note(
       `Local deleted: ${deletedCount}\n` +
-        `Remote deleted: ${remoteDeletedCount}\n` +
-        (failedCount > 0 ? `Local failed: ${failedCount}\n` : "") +
-        (remoteFailedCount > 0 ? `Remote failed: ${remoteFailedCount}` : ""),
+      `Remote deleted: ${remoteDeletedCount}\n` +
+      (failedCount > 0 ? `Local failed: ${failedCount}\n` : "") +
+      (remoteFailedCount > 0 ? `Remote failed: ${remoteFailedCount}` : ""),
       "Cleanup Summary"
     );
   } else {

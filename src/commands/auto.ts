@@ -7,6 +7,7 @@ import { generatePRSuggestion } from "../utils/openai.ts";
 import { getGitHubToken, updateConfig } from "../utils/config.ts";
 import { parseGitHubRepo } from "../utils/git.ts";
 import { Octokit } from "octokit";
+import { Spinner } from "../utils/ui.ts";
 
 export interface AutoOptions {
   /**
@@ -38,7 +39,7 @@ function sleep(ms: number): Promise<void> {
  */
 async function checkoutAndPullBase(
   baseBranch: string,
-  spinner: ReturnType<typeof p.spinner>,
+  spinner: Spinner,
   autoYes: boolean
 ): Promise<void> {
   p.log.step("Final: Preparing for next feature");
@@ -94,7 +95,7 @@ async function mergePRAndDeleteBranch(
   owner: string,
   repo: string,
   branchName: string,
-  spinner: ReturnType<typeof p.spinner>
+  spinner: Spinner
 ): Promise<void> {
   const githubToken = await getGitHubToken();
   if (!githubToken) {
@@ -142,7 +143,7 @@ async function mergePRAndDeleteBranch(
  */
 async function performReleaseAfterMerge(
   baseBranch: string,
-  spinner: ReturnType<typeof p.spinner>
+  spinner: Spinner
 ): Promise<void> {
   // Import release function
   const { createRelease } = await import("../services/release.ts");
@@ -217,7 +218,7 @@ async function performReleaseAfterMerge(
 async function createPullRequest(
   workingBranch: string,
   baseBranch: string,
-  spinner: ReturnType<typeof p.spinner>,
+  spinner: Spinner,
   autoYes: boolean,
   yolo: boolean = false
 ): Promise<{ prNumber?: number; owner?: string; repo?: string }> {
@@ -313,7 +314,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   // Release mode implies yolo (merge & delete), but NOT autoYes
   const effectiveYolo = release || yolo;
   const effectiveAutoYes = autoYes; // Only explicit --yes flag enables autoYes
-  const spinner = p.spinner();
+  const spinner = new Spinner();
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -353,7 +354,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
       if (githubToken) {
         spinner.start("Checking for existing PR...");
         const prCheck = await prExistsForBranch(githubToken);
-        spinner.stop();
+        spinner.stop("PR check complete");
 
         if (prCheck.exists && prCheck.pr) {
           p.note(

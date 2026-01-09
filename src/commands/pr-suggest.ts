@@ -2,6 +2,7 @@ import * as p from "@clack/prompts";
 import { Octokit } from "octokit";
 import { getBranchInfo, isGitRepository, isGitHubRepository, parseGitHubRepo, isBranchPushed, pushToOrigin, getBaseBranch, getCurrentBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
+import { Spinner } from "../utils/ui.ts";
 
 export interface PrSuggestOptions {
   autoYes?: boolean;
@@ -94,7 +95,7 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
     }
   }
 
-  const spinner = p.spinner();
+  const spinner = new Spinner();
 
   // Get branch info
   spinner.start("Analyzing branch commits...");

@@ -8,6 +8,7 @@ import {
     stageAllChanges,
 } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
+import { Spinner } from "../utils/ui.ts";
 
 export interface PrepareOptions {
     autoYes?: boolean;
@@ -59,7 +60,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
         throw new Error("Not a git repository. Please run this command in a git repository.");
     }
 
-    const spinner = p.spinner();
+    const spinner = new Spinner();
 
     // Get current branch and determine base branch (main or master)
     const currentBranch = await getCurrentBranch();

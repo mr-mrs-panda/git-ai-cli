@@ -10,6 +10,7 @@ import { cleanup } from "./commands/cleanup.ts";
 import { prepare } from "./commands/prepare.ts";
 import { release } from "./commands/release.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
+import { Spinner } from "./utils/ui.ts";
 
 function showHelp(): void {
   console.log(`
@@ -92,7 +93,7 @@ async function ensureApiKey(): Promise<void> {
     process.exit(1);
   }
 
-  const spinner = p.spinner();
+  const spinner = new Spinner();
   spinner.start("Saving configuration...");
 
   await updateConfig({ openaiApiKey: apiKey as string });

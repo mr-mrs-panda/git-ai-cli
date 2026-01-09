@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { Octokit } from "octokit";
+import { Spinner } from "../utils/ui.ts";
 import {
   isGitRepository,
   isGitHubRepository,
@@ -53,7 +54,7 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
     );
   }
 
-  const spinner = p.spinner();
+  const spinner = new Spinner();
 
   // Check if we're on the base branch (main/master), switch if not
   let currentBranch = await getCurrentBranch();
@@ -378,7 +379,7 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
   if (!isGitHub) {
     p.note(
       `Tag ${newVersionTag} created and pushed successfully.\n` +
-        "This is not a GitHub repository, so no GitHub release was created.",
+      "This is not a GitHub repository, so no GitHub release was created.",
       "Success"
     );
     return { version: newVersionTag };
@@ -398,7 +399,7 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
     if (autoYes) {
       p.note(
         "GitHub personal access token is required to create releases.\n" +
-          "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
+        "Please configure your token using 'git-ai settings' or set GITHUB_TOKEN environment variable.",
         "GitHub Token Missing"
       );
       return { version: newVersionTag };
@@ -406,8 +407,8 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
 
     p.note(
       "GitHub personal access token is required to create releases.\n" +
-        "You can create one at: https://github.com/settings/tokens\n\n" +
-        "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)",
+      "You can create one at: https://github.com/settings/tokens\n\n" +
+      "Required scopes: 'repo' (for private repos) or 'public_repo' (for public repos)",
       "GitHub Token Required"
     );
 
@@ -463,8 +464,8 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
 
     p.note(
       `Version: ${data.tag_name}\n` +
-        `Title: ${data.name}\n` +
-        `URL: ${data.html_url}`,
+      `Title: ${data.name}\n` +
+      `URL: ${data.html_url}`,
       "Release Details"
     );
 

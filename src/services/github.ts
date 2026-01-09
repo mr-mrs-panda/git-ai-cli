@@ -2,6 +2,7 @@ import * as p from "@clack/prompts";
 import { Octokit } from "octokit";
 import { getGitHubToken, updateConfig } from "../utils/config.ts";
 import { parseGitHubRepo, pushToOrigin, isBranchPushed, getTagDate } from "../utils/git.ts";
+import { Spinner, type ClackSpinner } from "../utils/ui.ts";
 
 export interface GitHubRepoInfo {
   owner: string;
@@ -58,7 +59,7 @@ export async function ensureGitHubToken(autoYes: boolean = false): Promise<strin
     }
 
     // Save token to config
-    const spinner = p.spinner();
+    const spinner = new Spinner();
     spinner.start("Saving GitHub token to config...");
     await updateConfig({ githubToken: token });
     spinner.stop("GitHub token saved");
@@ -76,7 +77,7 @@ export async function ensureGitHubToken(autoYes: boolean = false): Promise<strin
  * @returns Repository owner and name, or null if not a GitHub repo
  */
 export async function getGitHubRepoInfo(
-  spinner?: ReturnType<typeof p.spinner>
+  spinner?: ClackSpinner | Spinner
 ): Promise<GitHubRepoInfo | null> {
   if (spinner) {
     spinner.start("Getting repository information...");
@@ -111,10 +112,9 @@ export async function getGitHubRepoInfo(
 export async function ensureBranchPushed(
   currentBranch: string,
   autoYes: boolean = false,
-  spinner?: ReturnType<typeof p.spinner>
+  spinner?: ClackSpinner | Spinner
 ): Promise<boolean> {
-  const localSpinner = spinner || p.spinner();
-  const createdSpinner = !spinner;
+  const localSpinner = new Spinner(spinner);
 
   try {
     localSpinner.start("Checking if branch is pushed...");
@@ -159,10 +159,7 @@ export async function ensureBranchPushed(
 
     return true;
   } finally {
-    // Only stop the spinner if we created it
-    if (createdSpinner) {
-      localSpinner.stop();
-    }
+    localSpinner.stopOnFinally();
   }
 }
 
@@ -184,7 +181,7 @@ export async function createGitHubPullRequest(params: {
 }): Promise<{ number: number; url: string } | null> {
   const { title, description, currentBranch, baseBranch, owner, repo, githubToken, autoYes = false } = params;
 
-  const spinner = p.spinner();
+  const spinner = new Spinner();
 
   try {
     // Check if PR already exists for this branch
