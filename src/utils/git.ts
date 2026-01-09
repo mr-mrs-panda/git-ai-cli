@@ -69,7 +69,7 @@ export async function getStagedChanges(): Promise<GitFileChange[]> {
 
   for (const line of lines) {
     const [status, ...pathParts] = line.split("\t");
-    
+
     if (!status) continue;
 
     // For renames (R) and copies (C), pathParts has [oldPath, newPath]
@@ -111,6 +111,123 @@ export async function getStagedChanges(): Promise<GitFileChange[]> {
         skipReason: "Could not read diff",
       });
     }
+  }
+
+  return files;
+}
+
+/**
+ * Get all file changes (staged and unstaged) with their diffs
+ * Combines both staged, unstaged and untracked changes into one list
+ * Skips files that are too large
+ *
+ * @returns Array of all file changes (staged + unstaged + untracked)
+ */
+export async function getAllChanges(): Promise<GitFileChange[]> {
+  const files: GitFileChange[] = [];
+  const seenPaths = new Set<string>();
+
+  // Get all changes (staged and unstaged) - tracked files only
+  const trackedOutput = await $`git diff --name-status HEAD`.text();
+
+  if (trackedOutput.trim()) {
+    const lines = trackedOutput.trim().split("\n");
+
+    for (const line of lines) {
+      const [status, ...pathParts] = line.split("\t");
+
+      if (!status) continue;
+
+      // For renames (R) and copies (C), pathParts has [oldPath, newPath]
+      // For other operations, pathParts has [path]
+      // We want the final destination path
+      const path = pathParts[pathParts.length - 1];
+
+      if (!path || seenPaths.has(path)) continue;
+      seenPaths.add(path);
+
+      // Check file size
+      const fileInfo = await getFileInfo(path, status);
+
+      if (fileInfo.skipped) {
+        files.push({
+          path,
+          status,
+          diff: "",
+          skipped: true,
+          skipReason: fileInfo.skipReason,
+        });
+        continue;
+      }
+
+      // Get diff for this specific file (both staged and unstaged)
+      try {
+        const diff = await $`git diff ${path}`.text();
+        files.push({
+          path,
+          status,
+          diff: diff.trim(),
+          skipped: false,
+        });
+      } catch {
+        files.push({
+          path,
+          status,
+          diff: "",
+          skipped: true,
+          skipReason: "Could not read diff",
+        });
+      }
+    }
+  }
+
+  // Also get untracked files (new files not yet added to git)
+  try {
+    const untrackedOutput = await $`git ls-files --others --exclude-standard`.text();
+
+    if (untrackedOutput.trim()) {
+      const untrackedLines = untrackedOutput.trim().split("\n");
+
+      for (const path of untrackedLines) {
+        if (!path || seenPaths.has(path)) continue;
+        seenPaths.add(path);
+
+        // Check file size
+        const fileInfo = await getFileInfo(path, "?");
+
+        if (fileInfo.skipped) {
+          files.push({
+            path,
+            status: "?",
+            diff: "",
+            skipped: true,
+            skipReason: fileInfo.skipReason,
+          });
+          continue;
+        }
+
+        // Try to read untracked file content as diff
+        try {
+          const content = await Bun.file(path).text();
+          files.push({
+            path,
+            status: "?",
+            diff: content,
+            skipped: false,
+          });
+        } catch {
+          files.push({
+            path,
+            status: "?",
+            diff: "",
+            skipped: true,
+            skipReason: "Could not read file",
+          });
+        }
+      }
+    }
+  } catch {
+    // If untracked file listing fails, just continue with tracked files
   }
 
   return files;
