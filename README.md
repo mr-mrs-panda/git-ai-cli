@@ -30,7 +30,7 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - Works with all changes: staged, unstaged, and untracked files
   - Automatically skips large files (>100KB) and migration files
   - Uses conventional commit format
-  - Interactive TUI for reviewing and confirming commits
+  - Interactive TUI for confirming generated messages
   - Optional automatic push to origin
   - Perfect for IDEs like Rider that don't work with git staging
 
