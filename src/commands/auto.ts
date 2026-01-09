@@ -310,9 +310,9 @@ async function createPullRequest(
  */
 export async function auto(options: AutoOptions = {}): Promise<void> {
   const { autoYes = false, yolo = false, release = false } = options;
-  // Release mode implies yolo, yolo implies autoYes
+  // Release mode implies yolo (merge & delete), but NOT autoYes
   const effectiveYolo = release || yolo;
-  const effectiveAutoYes = effectiveYolo || autoYes;
+  const effectiveAutoYes = autoYes; // Only explicit --yes flag enables autoYes
   const spinner = p.spinner();
 
   // Check if we're in a git repository
