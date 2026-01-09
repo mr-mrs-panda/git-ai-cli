@@ -32,10 +32,7 @@ async function getOpenAIClient(): Promise<OpenAI> {
 export async function generateCommitMessageWithBugAnalysis(
   changes: Array<{ path: string; status: string; diff: string }>,
   branchName?: string
-): Promise<{
-  commitMessage: string;
-  bugs: Array<{ file: string; description: string; severity: string }>;
-}> {
+): Promise<string> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
 
@@ -51,9 +48,7 @@ export async function generateCommitMessageWithBugAnalysis(
 
   const prompt = `You are an expert code reviewer and git commit message writer.
 
-Analyze the following git changes and:
-1. Generate a commit message following Conventional Commits specification
-2. Identify any CRITICAL bugs or security issues in the code
+Analyze the following git changes and generate a commit message following Conventional Commits specification
 
 ${branchContext}
 COMMIT MESSAGE STRUCTURE:
@@ -73,33 +68,13 @@ A commit message consists of three parts separated by blank lines:
    - Reference issues: "Fixes #123" or "Closes #456"
    - Breaking changes: "BREAKING CHANGE: description"
 
-BUG ANALYSIS - Only report CRITICAL issues:
-- Null pointer/undefined access
-- Security vulnerabilities (SQL injection, XSS, etc.)
-- Logic errors causing data loss or corruption
-- Race conditions or concurrency issues
-- Incorrect error handling causing crashes
-- Memory/resource leaks
-- Infinite loops
-
-DO NOT report: style issues, minor optimizations, code smells, missing tests, documentation.
-
 Git changes:
 ${changesText}
 
 RESPOND WITH VALID JSON ONLY:
 {
   "commitMessage": "the full commit message here (can be multi-line with header, body, footer)",
-  "bugs": [
-    {
-      "file": "path/to/file.ts",
-      "description": "Brief description of the critical bug",
-      "severity": "critical|high"
-    }
-  ]
-}
-
-If no critical bugs found, return empty bugs array: "bugs": []`;
+}`;
 
   const response = await client.chat.completions.create({
     model: config.model || "gpt-5.2",
@@ -117,10 +92,7 @@ If no critical bugs found, return empty bugs array: "bugs": []`;
 
   try {
     const result = JSON.parse(content);
-    return {
-      commitMessage: result.commitMessage || "",
-      bugs: result.bugs || [],
-    };
+    return result.commitMessage || "";
   } catch (error) {
     console.error("Failed to parse response:", content);
     throw new Error("Failed to parse AI response");
@@ -229,9 +201,9 @@ export async function generatePRSuggestion(
 
   const diffsText = diffs && diffs.length > 0
     ? "\n\nCode Changes:\n" +
-      diffs.map((d, i) =>
-        `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`
-      ).join("\n")
+    diffs.map((d, i) =>
+      `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`
+    ).join("\n")
     : "";
 
   const feedbackSection = feedback
