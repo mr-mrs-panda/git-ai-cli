@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { getStagedChanges, stageAllChanges, getCurrentBranch } from "../utils/git.ts";
+import { getAllChanges, stageAllChanges, getCurrentBranch } from "../utils/git.ts";
 import { generateCommitMessageWithBugAnalysis } from "../utils/openai.ts";
 
 export interface CommitOptions {
@@ -16,8 +16,8 @@ export interface CommitOptions {
 }
 
 /**
- * Generate and create an AI-powered commit with the current changes
- * This function stages changes, generates a commit message using AI, and creates the commit
+ * Generate and create an AI-powered commit with all changes (staged, unstaged, and untracked)
+ * This function stages all changes, generates a commit message using AI, and creates the commit
  *
  * @param options - Configuration options for the commit process
  * @returns The generated commit message, or null if the commit was cancelled
@@ -28,14 +28,14 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
   const createdSpinner = !externalSpinner;
 
   try {
-    // Stage all changes
+    // Stage all changes (including untracked files)
     spinner.start("Staging all changes...");
     await stageAllChanges();
     spinner.stop("All changes staged");
 
-    // Get staged changes
+    // Get all changes to analyze
     spinner.start("Analyzing changes...");
-    const changes = await getStagedChanges();
+    const changes = await getAllChanges();
 
     if (changes.length === 0) {
       spinner.stop("No changes to commit");
@@ -79,7 +79,7 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
       const bugList = bugs
         .map((bug) => `  ⚠️  ${bug.file}\n     ${bug.description}\n     Severity: ${bug.severity}`)
         .join("\n\n");
-      
+
       p.note(
         `⚠️  CRITICAL BUGS DETECTED:\n\n${bugList}\n\n⚠️  Please review these issues before committing!`,
         "⚠️  WARNING"

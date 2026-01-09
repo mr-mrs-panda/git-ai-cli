@@ -26,17 +26,20 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - If you chose stash: reapplies changes on main so you can work fresh
   - Perfect before starting a new feature branch
 
-- **Commit Generator**: Analyzes your staged changes and generates meaningful commit messages using AI
+- **Commit Generator**: Analyzes all your changes and generates meaningful commit messages using AI
+  - Works with all changes: staged, unstaged, and untracked files
   - Automatically skips large files (>100KB) and migration files
   - Uses conventional commit format
   - Interactive TUI for reviewing and confirming commits
   - Optional automatic push to origin
+  - Perfect for IDEs like Rider that don't work with git staging
 
-- **Branch Creator**: Analyzes your changes and suggests appropriate branch names
+- **Branch Creator**: Analyzes all your changes and suggests appropriate branch names
+  - Works with all changes: staged, unstaged, and untracked files
   - AI-powered branch name generation
   - Automatically determines branch type (feature/bugfix/chore/refactor)
   - Creates and switches to the new branch
-  - Keeps your changes staged and ready to commit
+  - Perfect for analyzing all your work regardless of staging status
 
 - **PR Generator**: Generates pull request titles and descriptions based on:
   - Branch name
@@ -267,13 +270,19 @@ git-ai prepare -y
 **What it does:**
 1. Detects if you're on a feature branch or main/master
 2. If on feature branch with uncommitted changes, offers three options:
-   - **Commit**: Stages all changes, generates AI commit message, commits them
+   - **Commit**: Stages all changes (including untracked), generates AI commit message, commits them
    - **Stash**: Temporarily saves your changes, then restores them on main
    - **Discard**: Resets branch to HEAD (destructive, requires confirmation)
    - **Abort**: Cancels the operation and keeps changes as-is
 3. Checks out to main/master (if not already there)
 4. Pulls latest changes from remote
 5. If you stashed: Reapplies your changes on main so you're ready to create a new feature branch
+
+**Works with all changes:**
+- Staged changes
+- Unstaged modifications
+- Untracked files
+- Perfect for any workflow, including IDEs that don't use git staging
 
 **Typical workflow:**
 ```bash
@@ -287,19 +296,22 @@ git-ai branch   # or git checkout -b feature/new-feature
 ```
 
 #### Commit
-Generates a commit message from your staged changes:
+Generates a commit message from all your changes and commits them:
 ```bash
-# Stage your changes first
-git add .
-
-# Generate commit message
+# No need to stage first - git-ai handles everything
+# Just run:
 git-ai commit
+
+# Works with:
+# - Staged changes
+# - Unstaged modifications  
+# - Untracked files
 ```
 
 #### Branch
-Analyzes your changes and creates a new branch with an AI-generated name:
+Analyzes all your changes and creates a new branch with an AI-generated name:
 ```bash
-# Make some changes (staged or unstaged)
+# Make some changes (staged, unstaged, or untracked)
 # Create branch from changes
 git-ai branch
 ```

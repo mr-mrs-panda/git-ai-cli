@@ -4,8 +4,7 @@ import {
     isGitRepository,
     getCurrentBranch,
     getBaseBranch,
-    hasUnstagedChanges,
-    getStagedChanges,
+    getAllChanges,
     stageAllChanges,
 } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
@@ -18,19 +17,22 @@ export interface PrepareOptions {
  * Prepares the repository for creating a new feature branch.
  *
  * This command intelligently handles the workflow before starting a new feature:
- * 1. Detects uncommitted changes on feature branches
+ * 1. Detects all uncommitted changes on feature branches (staged, unstaged, untracked)
  * 2. Offers three options for handling changes:
- *    - Commit: Generate AI commit message and commit changes
- *    - Stash: Temporarily save changes for later
+ *    - Commit: Stages all changes and generates AI commit message
+ *    - Stash: Temporarily saves changes for later, prepares main, then reapplies on main
  *    - Discard: Reset branch to HEAD (destructive)
  * 3. Checks out to the base branch (main/master)
  * 4. Pulls latest changes from remote
  * 5. If stashed: Reapplies changes on the base branch
  *
+ * Works with all changes: staged changes, unstaged modifications, and untracked files.
+ * Perfect for any IDE or workflow that doesn't rely on git staging.
+ *
  * Typical workflow:
  * ```
- * On feature branch with changes → run prepare
- * → Choose stash → changes saved
+ * On feature branch with all types of changes → run prepare
+ * → Choose stash → all changes saved
  * → Switched to main → pulled latest
  * → Changes reapplied on main
  * → Ready to create new feature
@@ -79,11 +81,10 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
         return;
     }
 
-    // Check for uncommitted changes (both staged and unstaged)
-    const hasUnstaged = await hasUnstagedChanges();
-    const stagedChanges = await getStagedChanges();
+    // Check for uncommitted changes (all changes: staged, unstaged, and untracked)
+    const allChanges = await getAllChanges();
 
-    const hasChanges = hasUnstaged || stagedChanges.length > 0;
+    const hasChanges = allChanges.length > 0;
     let performedAction: "commit" | "stash" | "discard" | "none" = "none";
 
     if (hasChanges) {
@@ -154,12 +155,8 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
             }
         }
 
-        // Handle commit action: stage all and generate AI commit
+        // Handle commit action: generate AI commit for all changes
         if (action === "commit") {
-            spinner.start("Staging all changes...");
-            await stageAllChanges();
-            spinner.stop("Changes staged");
-
             try {
                 spinner.start("Generating commit message...");
                 const commitMessage = await generateAndCommit({

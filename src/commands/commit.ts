@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { getStagedChanges, isGitRepository, hasUnstagedChanges, hasOriginRemote, addOriginRemote, pushToOrigin } from "../utils/git.ts";
+import { getAllChanges, isGitRepository, hasOriginRemote, addOriginRemote, pushToOrigin } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
 
 export interface CommitOptions {
@@ -16,46 +16,17 @@ export async function commit(options: CommitOptions = {}): Promise<void> {
 
   const spinner = p.spinner();
 
-  // Get staged changes
-  spinner.start("Analyzing staged changes...");
-  let changes = await getStagedChanges();
+  // Get all changes (staged, unstaged, and untracked)
+  spinner.start("Analyzing all changes...");
+  const allChanges = await getAllChanges();
 
-  if (changes.length === 0) {
-    spinner.stop("No staged changes found");
-
-    // Check if there are unstaged changes
-    const hasUnstaged = await hasUnstagedChanges();
-
-    if (hasUnstaged) {
-      let stageAll = autoYes;
-
-      if (!autoYes) {
-        const response = await p.confirm({
-          message: "No staged changes found. Would you like to stage all changes?",
-          initialValue: true,
-        });
-
-        if (p.isCancel(response)) {
-          p.cancel("Commit cancelled");
-          return;
-        }
-
-        stageAll = response;
-      } else {
-        p.log.info("Auto-accepting: Staging all changes");
-      }
-
-      if (!stageAll) {
-        p.note("Use 'git add <files>' to stage specific files.", "Info");
-        return;
-      }
-    } else {
-      p.note("No changes to commit. Working directory is clean.", "Info");
-      return;
-    }
-  } else {
-    spinner.stop("Staged changes found");
+  if (allChanges.length === 0) {
+    spinner.stop("No changes found");
+    p.note("No changes to commit. Working directory is clean.", "Info");
+    return;
   }
+
+  spinner.stop(`Found ${allChanges.length} file(s) with changes`);
 
   // Use the shared commit service
   const commitMessage = await generateAndCommit({
