@@ -162,7 +162,7 @@ export async function getAllChanges(): Promise<GitFileChange[]> {
 
       // Get diff for this specific file (both staged and unstaged)
       try {
-        const diff = await $`git diff ${path}`.text();
+        const diff = await $`git diff HEAD ${path}`.text();
         files.push({
           path,
           status,

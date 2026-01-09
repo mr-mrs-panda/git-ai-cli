@@ -63,15 +63,27 @@ A commit message consists of three parts separated by blank lines:
    - Types: feat, fix, docs, style, refactor, perf, test, chore
    - Keep under 72 characters
    - Use imperative mood ("add feature" not "added feature")
+   - Be SPECIFIC: mention key details like new parameters, channels, conditions, etc.
 
 2. BODY (optional but recommended for non-trivial changes):
    - Explain the "why" and "what", not the "how"
    - Provide context and motivation for the change
+   - BE DETAILED: mention specific changes like new parameters, routing logic, channel distinctions
+   - If logic changes, explain the before/after behavior
    - Wrap at 72 characters per line
 
 3. FOOTER (optional):
    - Reference issues: "Fixes #123" or "Closes #456"
    - Breaking changes: "BREAKING CHANGE: description"
+
+IMPORTANT FOR COMMIT MESSAGE:
+- Read the code changes carefully and identify ALL key changes
+- Look for: new parameters, conditional logic, routing changes, channel distinctions, method calls
+- Example: If code adds routing to different channels (alert vs info), say "route errors to alert channel and success to info channel"
+- Example: If code adds boolean parameter to control behavior, mention it: "add isUrgent parameter to control notification priority"
+- Example: If code changes method call from SendAlert to SendInfo, say "use info channel instead of alert for non-critical notifications"
+- Be CONCRETE: name the actual methods, parameters, channels, or conditions you see in the diff
+- Avoid generic phrases like "improves visibility" - instead say HOW (e.g., "send to info Slack channel")
 
 BUG ANALYSIS - Only report CRITICAL issues:
 - Null pointer/undefined access
@@ -229,9 +241,9 @@ export async function generatePRSuggestion(
 
   const diffsText = diffs && diffs.length > 0
     ? "\n\nCode Changes:\n" +
-      diffs.map((d, i) =>
-        `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`
-      ).join("\n")
+    diffs.map((d, i) =>
+      `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`
+    ).join("\n")
     : "";
 
   const feedbackSection = feedback
