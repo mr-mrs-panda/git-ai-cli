@@ -53,6 +53,7 @@ src/
 ├── cli.ts              # Main entry point and CLI argument parsing
 ├── commands/           # Command implementations
 │   ├── auto.ts         # Smart workflow command
+│   ├── prepare.ts      # Prepare for new feature (handle changes, sync main)
 │   ├── commit.ts       # Commit message generation
 │   ├── create-branch.ts
 │   ├── pr-suggest.ts

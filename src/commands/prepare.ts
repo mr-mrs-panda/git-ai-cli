@@ -14,6 +14,40 @@ export interface PrepareOptions {
     autoYes?: boolean;
 }
 
+/**
+ * Prepares the repository for creating a new feature branch.
+ *
+ * This command intelligently handles the workflow before starting a new feature:
+ * 1. Detects uncommitted changes on feature branches
+ * 2. Offers three options for handling changes:
+ *    - Commit: Generate AI commit message and commit changes
+ *    - Stash: Temporarily save changes for later
+ *    - Discard: Reset branch to HEAD (destructive)
+ * 3. Checks out to the base branch (main/master)
+ * 4. Pulls latest changes from remote
+ * 5. If stashed: Reapplies changes on the base branch
+ *
+ * Typical workflow:
+ * ```
+ * On feature branch with changes → run prepare
+ * → Choose stash → changes saved
+ * → Switched to main → pulled latest
+ * → Changes reapplied on main
+ * → Ready to create new feature
+ * ```
+ *
+ * @param options Command options
+ * @param options.autoYes If true, aborts when uncommitted changes are detected instead of prompting
+ * @throws Error if not in a git repository or git operations fail
+ *
+ * @example
+ * // Interactive mode - user chooses action
+ * await prepare({ autoYes: false });
+ *
+ * @example
+ * // Auto mode - aborts if changes detected
+ * await prepare({ autoYes: true });
+ */
 export async function prepare(options: PrepareOptions = {}): Promise<void> {
     const { autoYes = false } = options;
 
@@ -25,13 +59,13 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
 
     const spinner = p.spinner();
 
-    // Get current branch
+    // Get current branch and determine base branch (main or master)
     const currentBranch = await getCurrentBranch();
     const baseBranch = await getBaseBranch();
 
     p.note(`Current branch: ${currentBranch}\nBase branch: ${baseBranch}`, "Prepare for Feature");
 
-    // If we're already on main/master, just pull
+    // If already on base branch, just pull latest changes
     if (currentBranch === baseBranch) {
         spinner.start(`Pulling latest from ${baseBranch}...`);
         try {
@@ -45,7 +79,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
         return;
     }
 
-    // Check for changes (both staged and unstaged)
+    // Check for uncommitted changes (both staged and unstaged)
     const hasUnstaged = await hasUnstagedChanges();
     const stagedChanges = await getStagedChanges();
 
@@ -61,9 +95,11 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
         let action: "commit" | "stash" | "discard" | "abort";
 
         if (autoYes) {
+            // In auto mode, abort when changes are detected
             action = "abort";
             p.log.warn("Auto mode: Aborting due to uncommitted changes");
         } else {
+            // Prompt user for how to handle the changes
             const response = await p.select({
                 message: "What would you like to do?",
                 options: [
@@ -98,11 +134,13 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
             action = response;
         }
 
+        // Handle abort action
         if (action === "abort") {
             p.cancel("Prepare cancelled. Your changes are safe.");
             return;
         }
 
+        // Handle stash action: save changes to git stash
         if (action === "stash") {
             spinner.start("Stashing changes...");
             try {
@@ -116,6 +154,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
             }
         }
 
+        // Handle commit action: stage all and generate AI commit
         if (action === "commit") {
             spinner.start("Staging all changes...");
             await stageAllChanges();
@@ -142,6 +181,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
             }
         }
 
+        // Handle discard action: reset branch to HEAD
         if (action === "discard") {
             const confirm = await p.confirm({
                 message: `Are you sure? This will discard all changes on '${currentBranch}'. This cannot be undone!`,
@@ -169,7 +209,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
         }
     }
 
-    // Now switch to base branch and pull
+    // Switch to base branch (main/master) if not already there
     if (currentBranch !== baseBranch) {
         spinner.start(`Switching to ${baseBranch}...`);
         try {
@@ -181,6 +221,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
         }
     }
 
+    // Pull latest changes from remote
     spinner.start(`Pulling latest from ${baseBranch}...`);
     try {
         await $`git pull origin ${baseBranch}`.quiet();
@@ -190,7 +231,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
         throw new Error(`Failed to pull from ${baseBranch}`);
     }
 
-    // If we had stashed changes, reapply them on main
+    // If changes were stashed, reapply them on the base branch
     if (performedAction === "stash") {
         spinner.start("Reapplying stashed changes on main...");
         try {
@@ -209,6 +250,7 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
             );
         }
     } else {
+        // No stash: show success message
         p.note(
             `You are now on ${baseBranch} with the latest changes.\nReady to create a new feature branch!`,
             "✓ Prepare Complete"

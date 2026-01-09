@@ -19,6 +19,13 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - YOLO mode: auto-merge PR and delete branch after merge
   - Perfect for quick fixes and features
 
+- **📋 Prepare Command**: Smart workflow to prepare for a new feature
+  - Handles uncommitted changes intelligently (commit, stash, or discard)
+  - Automatically checks out to main/master
+  - Pulls latest changes from remote
+  - If you chose stash: reapplies changes on main so you can work fresh
+  - Perfect before starting a new feature branch
+
 - **Commit Generator**: Analyzes your staged changes and generates meaningful commit messages using AI
   - Automatically skips large files (>100KB) and migration files
   - Uses conventional commit format
@@ -186,6 +193,7 @@ git-ai auto            # Smart workflow
 git-ai auto -y         # Auto mode with all prompts auto-accepted (blind mode)
 git-ai auto --yolo     # YOLO mode: auto-merge PR and delete branch
 git-ai auto --release  # Release mode: full workflow + merge + release
+git-ai prepare         # Prepare for new feature
 git-ai branch          # Create branch from changes
 git-ai commit          # Generate commit message
 git-ai pr              # Generate PR suggestion
@@ -245,6 +253,38 @@ git-ai auto --release
 - Perfect for quick hotfixes that need immediate release
 
 Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
+
+#### Prepare for Feature
+Prepares your repository for starting a new feature by handling uncommitted changes and syncing with the base branch:
+```bash
+# You're on a feature branch with uncommitted changes
+git-ai prepare
+
+# Or use blind mode to auto-abort if there are changes
+git-ai prepare -y
+```
+
+**What it does:**
+1. Detects if you're on a feature branch or main/master
+2. If on feature branch with uncommitted changes, offers three options:
+   - **Commit**: Stages all changes, generates AI commit message, commits them
+   - **Stash**: Temporarily saves your changes, then restores them on main
+   - **Discard**: Resets branch to HEAD (destructive, requires confirmation)
+   - **Abort**: Cancels the operation and keeps changes as-is
+3. Checks out to main/master (if not already there)
+4. Pulls latest changes from remote
+5. If you stashed: Reapplies your changes on main so you're ready to create a new feature branch
+
+**Typical workflow:**
+```bash
+# You're working on feature/old-feature with uncommitted changes
+git-ai prepare
+
+# Choose "Stash"
+# Now you're on main with your previous changes ready
+# Create a new feature branch
+git-ai branch   # or git checkout -b feature/new-feature
+```
 
 #### Commit
 Generates a commit message from your staged changes:
