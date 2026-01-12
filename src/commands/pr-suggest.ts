@@ -142,8 +142,65 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
     "Branch info"
   );
 
+  // Check if this is a GitHub repository and if a PR already exists
+  const isGitHub = await isGitHubRepository();
+  let existingPR: { number: number; title: string; body: string | null; url: string } | null = null;
+  let shouldUpdateExistingPR = false;
+
+  if (isGitHub) {
+    const { ensureGitHubToken, getGitHubRepoInfo, checkForExistingPR } = await import("../services/github.ts");
+
+    // Try to get GitHub token (don't fail if not available)
+    const githubToken = await ensureGitHubToken(true); // Use autoYes=true to skip prompts here
+
+    if (githubToken) {
+      const repoInfo = await getGitHubRepoInfo();
+      if (repoInfo) {
+        // Check for existing PR
+        existingPR = await checkForExistingPR({
+          currentBranch,
+          owner: repoInfo.owner,
+          repo: repoInfo.repo,
+          githubToken,
+          spinner,
+        });
+
+        if (existingPR) {
+          // PR already exists - ask user if they want to update it
+          p.note(
+            `Title: ${existingPR.title}\nURL: ${existingPR.url}`,
+            `Existing PR #${existingPR.number}`
+          );
+
+          if (!autoYes) {
+            const response = await p.confirm({
+              message: "A Pull Request already exists for this branch. Would you like to regenerate the title and description with the latest commits?",
+              initialValue: true,
+            });
+
+            if (p.isCancel(response)) {
+              p.cancel("PR suggestion cancelled");
+              return;
+            }
+
+            shouldUpdateExistingPR = response;
+          } else {
+            p.log.info("Auto-accepting: Will regenerate PR title and description");
+            shouldUpdateExistingPR = true;
+          }
+
+          if (!shouldUpdateExistingPR) {
+            p.note("Use the feedback loop to make changes if needed, or cancel to exit.", "Info");
+          }
+        }
+      }
+    }
+  }
+
   // Generate PR suggestion with feedback loop
-  spinner.start("Generating PR title and description with AI...");
+  spinner.start(existingPR && shouldUpdateExistingPR
+    ? "Regenerating PR title and description with AI (including existing PR context)..."
+    : "Generating PR title and description with AI...");
 
   let title: string = "";
   let description: string = "";
@@ -157,7 +214,10 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
         currentBranch,
         commits.map((c) => ({ message: c.message })),
         diffs.length > 0 ? diffs : undefined,
-        userFeedback
+        userFeedback,
+        existingPR && shouldUpdateExistingPR
+          ? { title: existingPR.title, body: existingPR.body }
+          : undefined
       );
 
       title = result.title;
@@ -166,18 +226,23 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
       spinner.stop("PR suggestion generated");
 
       // Display the generated PR info
-      p.note(title, "Suggested PR Title");
-      p.note(description, "Suggested PR Description");
+      p.note(title, existingPR && shouldUpdateExistingPR ? "Updated PR Title" : "Suggested PR Title");
+      p.note(description, existingPR && shouldUpdateExistingPR ? "Updated PR Description" : "Suggested PR Description");
 
-      // Check if this is a GitHub repository
-      const isGitHub = await isGitHubRepository();
-
-      // In autoYes mode, create PR if GitHub, otherwise just show
+      // In autoYes mode, create/update PR if GitHub, otherwise just show
       let action: string;
       if (autoYes) {
         if (isGitHub) {
-          p.log.info("Auto-accepting: Creating GitHub Pull Request");
-          action = "create-pr";
+          if (existingPR && shouldUpdateExistingPR) {
+            p.log.info("Auto-accepting: Updating GitHub Pull Request");
+            action = "update-pr";
+          } else if (existingPR) {
+            p.log.info("Existing PR not updated (user declined)");
+            action = "nothing";
+          } else {
+            p.log.info("Auto-accepting: Creating GitHub Pull Request");
+            action = "create-pr";
+          }
         } else {
           p.log.info("Not a GitHub repository, displaying suggestion only");
           action = "nothing";
@@ -188,7 +253,11 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
         const options: Array<{ value: string; label: string }> = [];
 
         if (isGitHub) {
-          options.push({ value: "create-pr", label: "Create GitHub Pull Request" });
+          if (existingPR && shouldUpdateExistingPR) {
+            options.push({ value: "update-pr", label: `Update GitHub Pull Request #${existingPR.number}` });
+          } else if (!existingPR) {
+            options.push({ value: "create-pr", label: "Create GitHub Pull Request" });
+          }
         }
 
         options.push(
@@ -231,6 +300,11 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
         // Continue the loop
       } else if (action === "create-pr") {
         await createGitHubPR(title, description, currentBranch, autoYes);
+        continueLoop = false;
+      } else if (action === "update-pr") {
+        if (existingPR) {
+          await updateGitHubPR(title, description, existingPR.number, autoYes);
+        }
         continueLoop = false;
       } else if (action === "copy-title") {
         await copyToClipboard(title);
@@ -343,5 +417,35 @@ async function createGitHubPR(title: string, description: string, currentBranch:
     repo: repoInfo.repo,
     githubToken,
     autoYes,
+  });
+}
+
+/**
+ * Update an existing GitHub Pull Request
+ */
+async function updateGitHubPR(title: string, description: string, prNumber: number, autoYes: boolean = false): Promise<void> {
+  const { ensureGitHubToken, getGitHubRepoInfo, updateGitHubPullRequest } = await import("../services/github.ts");
+
+  // Ensure GitHub token is available
+  const githubToken = await ensureGitHubToken(autoYes);
+  if (!githubToken) {
+    p.cancel("PR update cancelled");
+    return;
+  }
+
+  // Get repository info
+  const repoInfo = await getGitHubRepoInfo();
+  if (!repoInfo) {
+    throw new Error("Could not parse GitHub repository information from origin URL");
+  }
+
+  // Update the PR
+  await updateGitHubPullRequest({
+    prNumber,
+    title,
+    description,
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    githubToken,
   });
 }
