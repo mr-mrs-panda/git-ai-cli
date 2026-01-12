@@ -17,6 +17,13 @@ export interface PRInfo {
   mergedAt: string;
 }
 
+export interface ExistingPR {
+  number: number;
+  title: string;
+  body: string | null;
+  url: string;
+}
+
 /**
  * Ensure GitHub token is available, prompt user if not
  *
@@ -164,6 +171,109 @@ export async function ensureBranchPushed(
 }
 
 /**
+ * Check if a PR already exists for the current branch
+ *
+ * @param params - Check parameters
+ * @returns Existing PR info if found, null otherwise
+ */
+export async function checkForExistingPR(params: {
+  currentBranch: string;
+  owner: string;
+  repo: string;
+  githubToken: string;
+  spinner?: ClackSpinner | Spinner;
+}): Promise<ExistingPR | null> {
+  const { currentBranch, owner, repo, githubToken, spinner } = params;
+
+  try {
+    if (spinner) {
+      spinner.start("Checking for existing Pull Request...");
+    }
+
+    const octokit = new Octokit({ auth: githubToken });
+
+    // List open PRs with this head branch
+    const { data: prs } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${currentBranch}`,
+      state: "open",
+    });
+
+    if (prs && prs.length > 0 && prs[0]) {
+      const pr = prs[0];
+      if (spinner) {
+        spinner.stop("Pull Request already exists");
+      }
+      return {
+        number: pr.number,
+        title: pr.title,
+        body: pr.body,
+        url: pr.html_url,
+      };
+    }
+
+    if (spinner) {
+      spinner.stop("No existing Pull Request found");
+    }
+    return null;
+  } catch (error: any) {
+    if (spinner) {
+      spinner.stop("Failed to check for existing PR");
+    }
+    throw new Error(`Could not check for existing PR: ${error.message || String(error)}`);
+  }
+}
+
+/**
+ * Update an existing GitHub Pull Request
+ *
+ * @param params - PR update parameters
+ * @returns PR number and URL if successful, null if cancelled or failed
+ */
+export async function updateGitHubPullRequest(params: {
+  prNumber: number;
+  title: string;
+  description: string;
+  owner: string;
+  repo: string;
+  githubToken: string;
+}): Promise<{ number: number; url: string } | null> {
+  const { prNumber, title, description, owner, repo, githubToken } = params;
+
+  const spinner = new Spinner();
+
+  try {
+    spinner.start("Updating Pull Request...");
+
+    const octokit = new Octokit({ auth: githubToken });
+
+    const { data } = await octokit.rest.pulls.update({
+      owner,
+      repo,
+      pull_number: prNumber,
+      title,
+      body: description,
+    });
+
+    spinner.stop("Pull Request updated successfully!");
+
+    p.note(
+      `Title: ${data.title}\n` +
+      `URL: ${data.html_url}\n` +
+      `Number: #${data.number}`,
+      "Updated Pull Request"
+    );
+
+    return { number: data.number, url: data.html_url };
+  } catch (error: any) {
+    spinner.stop("Failed to update Pull Request");
+    const message = error.response?.data?.message || error.message || String(error);
+    throw new Error(`Could not update PR: ${message}`);
+  }
+}
+
+/**
  * Create a GitHub Pull Request
  *
  * @param params - PR creation parameters
@@ -185,30 +295,25 @@ export async function createGitHubPullRequest(params: {
 
   try {
     // Check if PR already exists for this branch
-    spinner.start("Checking for existing Pull Request...");
-
-    const octokit = new Octokit({ auth: githubToken });
-
-    // List open PRs with this head branch
-    const { data: prs } = await octokit.rest.pulls.list({
+    const existingPR = await checkForExistingPR({
+      currentBranch,
       owner,
       repo,
-      head: `${owner}:${currentBranch}`,
-      state: "open",
+      githubToken,
+      spinner,
     });
 
-    if (prs && prs.length > 0 && prs[0]) {
-      spinner.stop("Pull Request already exists!");
-      const pr = prs[0];
+    if (existingPR) {
       p.note(
-        `A pull request for this branch already exists: #${pr.number}\n${pr.html_url}`,
+        `A pull request for this branch already exists: #${existingPR.number}\n${existingPR.url}`,
         "PR already exists"
       );
-      return { number: pr.number, url: pr.html_url };
+      return { number: existingPR.number, url: existingPR.url };
     }
 
     // Create PR
-    spinner.message("Creating Pull Request...");
+    spinner.start("Creating Pull Request...");
+    const octokit = new Octokit({ auth: githubToken });
     const { data } = await octokit.rest.pulls.create({
       owner,
       repo,

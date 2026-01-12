@@ -129,7 +129,8 @@ export async function generatePRSuggestion(
   branchName: string,
   commits: Array<{ message: string }>,
   diffs?: Array<{ path: string; status: string; diff: string }>,
-  feedback?: string
+  feedback?: string,
+  existingPR?: { title: string; body: string | null }
 ): Promise<{ title: string; description: string }> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
@@ -142,6 +143,15 @@ export async function generatePRSuggestion(
       `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`
     ).join("\n")
     : "";
+
+  const existingPRSection = existingPR
+    ? `\n\nEXISTING PR CONTEXT (this PR already exists and will be updated):
+Current Title: ${existingPR.title}
+Current Description:
+${existingPR.body || "(no description)"}
+
+IMPORTANT: The above is the current PR state. Consider this context when generating the updated title and description. Include information about the new commits while maintaining the overall structure and theme.\n`
+    : '';
 
   const feedbackSection = feedback
     ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
@@ -157,7 +167,7 @@ Analyze the following information and generate a PR title and description.
 Branch name: ${branchName}
 
 Commits:
-${commitsText}${diffsText}${feedbackSection}
+${commitsText}${diffsText}${existingPRSection}${feedbackSection}
 
 Rules:
 - Title should be clear, concise, and descriptive (max 72 characters)
