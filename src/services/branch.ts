@@ -10,9 +10,10 @@ export interface BranchSuggestion {
 /**
  * Analyze all changes (staged and unstaged) and generate a branch name suggestion
  *
+ * @param feedback - Optional user feedback to improve the branch name
  * @returns Branch name suggestion or null if no changes found
  */
-export async function analyzeBranchName(): Promise<BranchSuggestion | null> {
+export async function analyzeBranchName(feedback?: string): Promise<BranchSuggestion | null> {
   // Get all changes regardless of stage status
   const allChanges = await getAllChanges();
 
@@ -33,7 +34,8 @@ export async function analyzeBranchName(): Promise<BranchSuggestion | null> {
       path: c.path,
       status: c.status,
       diff: c.diff,
-    }))
+    })),
+    feedback
   );
 
   return suggestion;

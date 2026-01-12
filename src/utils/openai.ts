@@ -33,7 +33,8 @@ async function getOpenAIClient(): Promise<OpenAI> {
  */
 export async function generateCommitMessage(
   changes: Array<{ path: string; status: string; diff: string }>,
-  branchName?: string
+  branchName?: string,
+  feedback?: string
 ): Promise<string> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
@@ -46,6 +47,13 @@ export async function generateCommitMessage(
 
   const branchContext = branchName
     ? `\nBranch name: ${branchName}\nConsider the branch name context when writing the commit message.\n`
+    : '';
+
+  const feedbackSection = feedback
+    ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
+${feedback}
+
+IMPORTANT: Address the user's feedback and regenerate the commit message accordingly.\n`
     : '';
 
   const prompt = `You are an expert at writing meaningful git commit messages following Conventional Commits specification.
@@ -94,7 +102,7 @@ BREAKING CHANGE: Database connection configuration format has changed
 Closes #234
 
 Git changes:
-${changesText}
+${changesText}${feedbackSection}
 
 IMPORTANT: Generate ONLY the commit message. If the changes are simple, a header-only commit is fine. For significant changes, include a body explaining why the change was needed.`;
 
@@ -206,7 +214,8 @@ IMPORTANT:
  * Generate branch name from git changes
  */
 export async function generateBranchName(
-  changes: Array<{ path: string; status: string; diff: string }>
+  changes: Array<{ path: string; status: string; diff: string }>,
+  feedback?: string
 ): Promise<{ name: string; type: "feature" | "bugfix" | "chore" | "refactor"; description: string }> {
   const config = await loadConfig();
   const client = await getOpenAIClient();
@@ -216,6 +225,13 @@ export async function generateBranchName(
       return `File: ${change.path} (${change.status})\n${change.diff}\n`;
     })
     .join("\n---\n\n");
+
+  const feedbackSection = feedback
+    ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
+${feedback}
+
+IMPORTANT: Address the user's feedback and regenerate the branch name accordingly.\n`
+    : '';
 
   const prompt = `You are an expert at analyzing code changes and creating descriptive git branch names.
 
@@ -231,7 +247,7 @@ Rules:
 - Be specific about the component/area being modified
 
 Git changes:
-${changesText}
+${changesText}${feedbackSection}
 
 IMPORTANT: You MUST respond with ONLY these three lines, no other text:
 TYPE: <feature|bugfix|chore|refactor>
