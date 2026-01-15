@@ -128,7 +128,12 @@ export async function getAllChanges(): Promise<GitFileChange[]> {
   const seenPaths = new Set<string>();
 
   // Get all changes (staged and unstaged) - tracked files only
-  const trackedOutput = await $`git diff --name-status HEAD`.text();
+  const proc = Bun.spawn(["git", "diff", "--name-status", "HEAD"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+  const trackedOutput = await new Response(proc.stdout).text();
 
   if (trackedOutput.trim()) {
     const lines = trackedOutput.trim().split("\n");
@@ -161,14 +166,31 @@ export async function getAllChanges(): Promise<GitFileChange[]> {
       }
 
       // Get diff for this specific file (both staged and unstaged)
+      // Use -- separator to properly handle deleted files
       try {
-        const diff = await $`git diff HEAD ${path}`.text();
-        files.push({
-          path,
-          status,
-          diff: diff.trim(),
-          skipped: false,
+        const proc = Bun.spawn(["git", "diff", "HEAD", "--", path], {
+          stdout: "pipe",
+          stderr: "pipe",
         });
+        await proc.exited;
+
+        if (proc.exitCode === 0) {
+          const diff = await new Response(proc.stdout).text();
+          files.push({
+            path,
+            status,
+            diff: diff.trim(),
+            skipped: false,
+          });
+        } else {
+          files.push({
+            path,
+            status,
+            diff: "",
+            skipped: true,
+            skipReason: "Could not read diff",
+          });
+        }
       } catch {
         files.push({
           path,
@@ -183,7 +205,12 @@ export async function getAllChanges(): Promise<GitFileChange[]> {
 
   // Also get untracked files (new files not yet added to git)
   try {
-    const untrackedOutput = await $`git ls-files --others --exclude-standard`.text();
+    const untrackedProc = Bun.spawn(["git", "ls-files", "--others", "--exclude-standard"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await untrackedProc.exited;
+    const untrackedOutput = await new Response(untrackedProc.stdout).text();
 
     if (untrackedOutput.trim()) {
       const untrackedLines = untrackedOutput.trim().split("\n");
@@ -337,9 +364,10 @@ async function getFileInfo(
   path: string,
   status: string
 ): Promise<{ skipped: boolean; skipReason?: string }> {
-  // Skip deleted files
+  // Don't skip deleted files - they are valid changes
+  // But we can't check their size since they don't exist anymore
   if (status === "D") {
-    return { skipped: true, skipReason: "File deleted" };
+    return { skipped: false };
   }
 
   // Check for known migration patterns
