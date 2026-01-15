@@ -559,13 +559,44 @@ async function getReleaseStats(
   try {
     const octokit = new Octokit({ auth: githubToken });
 
-    const { data: releases } = await octokit.rest.repos.listReleases({
-      owner,
-      repo,
-      per_page: 100,
-    });
+    // Fetch all releases with pagination
+    const allReleases: Array<{
+      tag_name: string;
+      name: string | null;
+      published_at: string | null;
+      created_at: string;
+      body: string | null;
+    }> = [];
+    
+    let page = 1;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const { data: releases } = await octokit.rest.repos.listReleases({
+        owner,
+        repo,
+        per_page: 100,
+        page,
+      });
+      
+      if (releases.length === 0) {
+        hasMore = false;
+      } else {
+        allReleases.push(...releases);
+        page++;
+        
+        // Stop if we've gone past our date range (releases are sorted by date desc)
+        const oldestInBatch = releases[releases.length - 1];
+        if (oldestInBatch) {
+          const oldestDate = new Date(oldestInBatch.published_at || oldestInBatch.created_at);
+          if (oldestDate < startDate) {
+            hasMore = false;
+          }
+        }
+      }
+    }
 
-    const relevantReleases = releases
+    const relevantReleases = allReleases
       .filter((r) => {
         const date = new Date(r.published_at || r.created_at);
         return date >= startDate && date <= endDate;
