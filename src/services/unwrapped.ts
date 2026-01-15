@@ -35,7 +35,7 @@ export interface UnwrappedStats {
 
   // Release stats
   totalReleases: number;
-  releases: Array<{ tag: string; name: string; date: string }>;
+  releases: Array<{ tag: string; name: string; date: string; body: string }>;
 
   // All commit messages (first line only) for AI analysis
   allCommitMessages: string[];
@@ -543,7 +543,7 @@ async function getReleaseStats(
       .filter(Boolean)
       .map((line) => {
         const [tag, dateStr] = line.split("|");
-        return { tag: tag ?? "", name: tag ?? "", date: dateStr ?? "" };
+        return { tag: tag ?? "", name: tag ?? "", date: dateStr ?? "", body: "" };
       })
       .filter((r) => {
         const date = new Date(r.date);
@@ -574,6 +574,7 @@ async function getReleaseStats(
         tag: r.tag_name,
         name: r.name || r.tag_name,
         date: r.published_at || r.created_at,
+        body: r.body || "",
       }));
 
     return {
@@ -662,6 +663,9 @@ export async function generateUnwrappedHTML(
 
   // Generate AI summary
   const summary = await generateAISummary(stats);
+
+  onProgress("📦 Summarizing new features...");
+  const featuresSummary = await generateFeaturesSummary(stats);
 
   onProgress("✨ Creating beautiful HTML report...");
 
@@ -1046,10 +1050,87 @@ export async function generateUnwrappedHTML(
       margin-bottom: 1rem;
     }
     
-    .ai-summary p {
+    .ai-summary .ai-content {
       color: var(--text-secondary);
       font-size: 1.1rem;
       line-height: 1.8;
+    }
+    
+    .ai-summary .ai-content p {
+      margin-bottom: 1rem;
+    }
+    
+    .ai-summary .ai-content p:last-child {
+      margin-bottom: 0;
+    }
+    
+    .ai-summary .ai-content ul {
+      margin: 1rem 0;
+      padding-left: 1.5rem;
+    }
+    
+    .ai-summary .ai-content li {
+      margin-bottom: 0.5rem;
+    }
+    
+    .ai-summary .ai-content strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    
+    /* Features Summary */
+    .features-summary {
+      background: linear-gradient(135deg, #1a2f1a 0%, #161b22 100%);
+      border: 2px solid var(--accent-green);
+      border-radius: 24px;
+      padding: 2.5rem;
+      margin: 2rem 0;
+    }
+    
+    .features-summary h3 {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      color: var(--accent-green);
+    }
+    
+    .features-summary .features-content {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+    
+    .features-summary .feature-category {
+      margin-bottom: 1.5rem;
+    }
+    
+    .features-summary .feature-category:last-child {
+      margin-bottom: 0;
+    }
+    
+    .features-summary .feature-category h4 {
+      color: var(--text-primary);
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    .features-summary ul {
+      margin: 0;
+      padding-left: 1.5rem;
+    }
+    
+    .features-summary li {
+      margin-bottom: 0.5rem;
+    }
+    
+    .features-summary strong {
+      color: var(--text-primary);
+    }
+    
+    .features-summary p {
+      margin-bottom: 0.75rem;
     }
     
     /* Word Cloud */
@@ -1152,9 +1233,17 @@ export async function generateUnwrappedHTML(
     
     <!-- AI Summary -->
     <div class="ai-summary">
-      <h3>🤖 AI Summary</h3>
-      <p>${summary}</p>
+      <h3>🤖 AI Year in Review</h3>
+      <div class="ai-content">${summary}</div>
     </div>
+    
+    <!-- Features Summary -->
+    ${featuresSummary ? `
+    <div class="features-summary">
+      <h3>📦 What You Shipped</h3>
+      <div class="features-content">${featuresSummary}</div>
+    </div>
+    ` : ''}
     
     <!-- Quick Stats Cards -->
     <div class="section-header">
@@ -1524,8 +1613,13 @@ async function generateAISummary(stats: UnwrappedStats): Promise<string> {
   try {
     const config = await loadConfig();
 
+    const fallbackHtml = `<p>🚀 This year, <strong>${stats.repoOwner}/${stats.repoName}</strong> saw <strong>${stats.totalCommits}</strong> commits from ${stats.topAuthors.length} contributors.</p>
+<p>The team added <strong>+${stats.linesAdded.toLocaleString()}</strong> lines and removed <strong>-${stats.linesDeleted.toLocaleString()}</strong> lines of code.</p>
+${stats.mergedPRs > 0 ? `<p><strong>${stats.mergedPRs}</strong> pull requests were merged and the project shipped <strong>${stats.totalReleases}</strong> releases.</p>` : `<p>The project shipped <strong>${stats.totalReleases}</strong> releases.</p>`}
+<p>🎉 Keep up the great work!</p>`;
+
     if (!config.openaiApiKey) {
-      return `This year, ${stats.repoOwner}/${stats.repoName} saw ${stats.totalCommits} commits from ${stats.topAuthors.length} contributors. The team added ${stats.linesAdded.toLocaleString()} lines and removed ${stats.linesDeleted.toLocaleString()} lines of code. ${stats.mergedPRs > 0 ? `${stats.mergedPRs} pull requests were merged, ` : ''}and the project shipped ${stats.totalReleases} releases. Keep up the great work!`;
+      return fallbackHtml;
     }
 
     const client = new OpenAI({ apiKey: config.openaiApiKey });
@@ -1578,18 +1672,138 @@ Based on ALL of this information, write a fun, insightful 3-4 sentence summary t
 3. Has a celebratory, Spotify-Wrapped-style tone
 4. Mentions specific things that happened (not just numbers)
 
-Be creative and tell the story of this repository's year!`;
+Be creative and tell the story of this repository's year!
+
+Write in **simple HTML format** (will be embedded in a styled container).
+
+RULES:
+1. Use <p> tags for paragraphs
+2. Use <strong> for emphasis on key achievements/numbers
+3. Use <ul><li> for listing main themes/features worked on
+4. Use emojis liberally 🎉🚀💪
+5. 3-4 short paragraphs max
+6. Be celebratory, Spotify-Wrapped-style!
+7. Mention SPECIFIC things that happened (features, fixes, improvements based on commits)
+
+Example format:
+<p>🚀 What a year for <strong>repo-name</strong>! You shipped <strong>X releases</strong> including the amazing <strong>feature Y</strong>.</p>
+<p>Your main focus areas were:</p>
+<ul>
+  <li>💡 Feature A and B</li>
+  <li>🐛 Bug fixes and improvements</li>
+  <li>🔧 Refactoring and cleanup</li>
+</ul>
+<p>🎉 Keep shipping amazing code!</p>
+
+OUTPUT ONLY THE HTML, nothing else.`;
 
     const response = await client.chat.completions.create({
       model: config.model || "gpt-5.2",
-      messages: [{ role: "user", content: prompt }]
+      messages: [{ role: "user", content: prompt }],
     });
 
-    return (
-      response.choices[0]?.message?.content?.trim() ||
-      `What a year for ${stats.repoName}! ${stats.totalCommits} commits and counting.`
-    );
+    const content = response.choices[0]?.message?.content?.trim();
+    
+    // Validate it looks like HTML
+    if (content && (content.includes("<p>") || content.includes("<ul>"))) {
+      return content;
+    }
+    
+    // If not HTML, wrap it
+    if (content) {
+      return `<p>${content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
+    }
+
+    return `<p>What a year for <strong>${stats.repoName}</strong>! ${stats.totalCommits} commits and counting. 🎉</p>`;
   } catch {
-    return `This year, ${stats.repoOwner}/${stats.repoName} saw ${stats.totalCommits} commits. The team added ${stats.linesAdded.toLocaleString()} lines of code and shipped ${stats.totalReleases} releases. Amazing work!`;
+    return `<p>This year, <strong>${stats.repoOwner}/${stats.repoName}</strong> saw <strong>${stats.totalCommits}</strong> commits.</p>
+<p>The team added <span style="color: #3fb950;">+${stats.linesAdded.toLocaleString()}</span> lines of code and shipped <strong>${stats.totalReleases}</strong> releases.</p>
+<p>🎉 Amazing work!</p>`;
+  }
+}
+
+/**
+ * Generate AI-powered features summary based on release notes
+ */
+async function generateFeaturesSummary(stats: UnwrappedStats): Promise<string> {
+  // If no releases, return empty
+  if (stats.releases.length === 0) {
+    return "";
+  }
+
+  try {
+    const config = await loadConfig();
+
+    // Build release info with bodies
+    const releaseInfo = stats.releases
+      .map((r) => {
+        let info = `### ${r.tag}: ${r.name}`;
+        if (r.body) {
+          // Truncate very long release notes
+          const body = r.body.length > 1000 ? r.body.substring(0, 1000) + "..." : r.body;
+          info += `\n${body}`;
+        }
+        return info;
+      })
+      .join("\n\n");
+
+    const fallbackHtml = `<p>This year you shipped <strong>${stats.totalReleases} releases</strong>:</p>
+<ul>
+${stats.releases.slice(0, 5).map((r) => `  <li><strong>${r.tag}</strong>: ${r.name}</li>`).join("\n")}
+</ul>`;
+
+    if (!config.openaiApiKey) {
+      return fallbackHtml;
+    }
+
+    const client = new OpenAI({ apiKey: config.openaiApiKey });
+
+    const prompt = `You are an AI that summarizes software releases into a concise feature overview.
+
+Analyze these GitHub releases from the past year and create a **beautiful HTML summary** of the main features and improvements.
+
+## Releases
+${releaseInfo}
+
+---
+
+Create a visually appealing HTML summary that:
+1. Groups features into categories (🚀 Features, 🐛 Bug Fixes, 🔧 Improvements, etc.)
+2. Highlights the most impactful changes
+3. Uses <strong> for key feature names
+4. Uses emojis for visual appeal
+5. Is concise - max 3-4 bullet points per category
+6. Only includes categories that have content
+
+Format:
+<div class="feature-category">
+  <h4>🚀 New Features</h4>
+  <ul>
+    <li><strong>Feature Name</strong> - Brief description</li>
+  </ul>
+</div>
+<div class="feature-category">
+  <h4>🔧 Improvements</h4>
+  <ul>
+    <li>Improvement 1</li>
+  </ul>
+</div>
+
+OUTPUT ONLY THE HTML, nothing else.`;
+
+    const response = await client.chat.completions.create({
+      model: config.model || "gpt-5.2",
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const content = response.choices[0]?.message?.content?.trim();
+
+    if (content && (content.includes("<") || content.includes(">"))) {
+      return content;
+    }
+
+    return fallbackHtml;
+  } catch {
+    return `<p>Shipped <strong>${stats.totalReleases} releases</strong> this year! 🚀</p>`;
   }
 }
