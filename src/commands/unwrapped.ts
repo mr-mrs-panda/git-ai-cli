@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { collectUnwrappedStats, generateUnwrappedHTML } from "../services/unwrapped.ts";
+import { collectUnwrappedStats, generateUnwrappedHTML, type Language } from "../services/unwrapped.ts";
 import { isGitRepository, isGitHubRepository } from "../utils/git.ts";
 import { Spinner } from "../utils/ui.ts";
 import { tmpdir } from "os";
@@ -7,6 +7,7 @@ import { join } from "path";
 
 export interface UnwrappedOptions {
   autoYes?: boolean;
+  language?: Language;
 }
 
 // Fun loading messages for entertainment while stats are being collected
@@ -48,7 +49,7 @@ const funFacts = [
 ];
 
 export async function unwrapped(options: UnwrappedOptions = {}): Promise<void> {
-  const { autoYes = false } = options;
+  const { autoYes = false, language = "english" } = options;
 
   // Check if we're in a git repository
   if (!(await isGitRepository())) {
@@ -112,6 +113,7 @@ export async function unwrapped(options: UnwrappedOptions = {}): Promise<void> {
       onProgress: (message) => {
         spinner.message(message);
       },
+      language,
     });
 
     // Clear the message rotation
@@ -125,6 +127,7 @@ export async function unwrapped(options: UnwrappedOptions = {}): Promise<void> {
       onProgress: (message) => {
         spinner.message(message);
       },
+      language,
     });
 
     // Save to temp file

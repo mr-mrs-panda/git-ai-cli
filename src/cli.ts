@@ -33,12 +33,13 @@ Commands:
   help      Show this help message
 
 Options:
-  -h, --help     Show this help message
-  -v, --version  Show version
-  -y, --yes      Auto-accept all prompts (blind mode)
-  --yolo         YOLO mode: auto-merge PR and delete branch
-  --release      Release mode: auto workflow + merge + release (implies --yolo)
-  --no-prs       Disable fetching PR info for release notes (PRs are included by default)
+  -h, --help            Show this help message
+  -v, --version         Show version
+  -y, --yes             Auto-accept all prompts (blind mode)
+  --yolo                YOLO mode: auto-merge PR and delete branch
+  --release             Release mode: auto workflow + merge + release (implies --yolo)
+  --no-prs              Disable fetching PR info for release notes (PRs are included by default)
+  --language <lang>     Language for unwrapped report (english or german, default: english)
 
 Examples:
   git-ai              # Interactive mode
@@ -53,6 +54,7 @@ Examples:
   git-ai release      # Create a release (includes PRs if GitHub token available)
   git-ai release --no-prs  # Release without PR info
   git-ai unwrapped    # Your year in code - Spotify Wrapped style summary
+  git-ai unwrapped --language german  # Year in code in German
   git-ai cleanup      # Clean up merged branches
   git-ai settings     # Configure settings
 
@@ -197,8 +199,35 @@ async function main(): Promise<void> {
   const releaseFlag = args.includes("--release");
   const noPRsFlag = args.includes("--no-prs");
 
+  // Parse language flag
+  let languageValue: "english" | "german" = "english";
+  const languageFlagIndex = args.findIndex(arg => arg === "--language" || arg.startsWith("--language="));
+  if (languageFlagIndex !== -1) {
+    const languageArg = args[languageFlagIndex];
+    if (languageArg?.startsWith("--language=")) {
+      // Format: --language=german
+      const value = languageArg.split("=")[1]?.toLowerCase();
+      if (value === "german" || value === "english") {
+        languageValue = value;
+      }
+    } else {
+      // Format: --language german
+      const nextArg = args[languageFlagIndex + 1]?.toLowerCase();
+      if (nextArg === "german" || nextArg === "english") {
+        languageValue = nextArg;
+      }
+    }
+  }
+
   // Filter out flags to get the command
-  const commandArgs = args.filter((arg) => !arg.startsWith("-"));
+  // Also filter out language value if it follows --language flag
+  const commandArgs = args.filter((arg, index) => {
+    if (arg.startsWith("-")) return false;
+    // Check if previous arg was --language
+    const prevArg = args[index - 1];
+    if (prevArg === "--language") return false;
+    return true;
+  });
 
   let action: string;
 
@@ -237,7 +266,7 @@ async function main(): Promise<void> {
     } else if (action === "release") {
       await release({ autoYes: yesFlag, includePRs: !noPRsFlag });
     } else if (action === "unwrapped") {
-      await unwrapped({ autoYes: yesFlag });
+      await unwrapped({ autoYes: yesFlag, language: languageValue });
     } else if (action === "cleanup") {
       await cleanup({ autoYes: yesFlag });
     } else if (action === "settings") {

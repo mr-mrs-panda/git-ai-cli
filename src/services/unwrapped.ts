@@ -55,8 +55,177 @@ export interface UnwrappedStats {
   repoOwner: string;
 }
 
+export type Language = "english" | "german";
+
 export interface UnwrappedOptions {
   onProgress?: (message: string) => void;
+  language?: Language;
+}
+
+// Translation system
+interface Translations {
+  unwrapped: string;
+  yearInReview: string;
+  byTheNumbers: string;
+  topContributors: string;
+  activityPatterns: string;
+  funFacts: string;
+  commitMessageWordCloud: string;
+  mostChangedFiles: string;
+  releasesThisYear: string;
+  commitsPushedThisYear: string;
+  linesAdded: string;
+  linesDeleted: string;
+  pullRequestsMerged: string;
+  releases: string;
+  avgCommitsPerWeek: string;
+  longestStreak: string;
+  days: string;
+  nightOwlCommits: string;
+  nightOwlCommitsDesc: string;
+  weekendWarrior: string;
+  weekendWarriorDesc: string;
+  busiestDay: string;
+  busiestDayDesc: string;
+  emojiUsage: string;
+  emojiUsageDesc: string;
+  fastestPRMerge: string;
+  longestPR: string;
+  commitsByMonth: string;
+  commitsByDay: string;
+  commitsByHour: string;
+  fileTypesChanged: string;
+  generatedWith: string;
+  yourYearInCode: string;
+  commits: string;
+  aiYearInReview: string;
+  whatYouShipped: string;
+  // Personality types
+  nightOwlType: string;
+  nightOwlDesc: string;
+  weekendWarriorType: string;
+  weekendWarriorTypeDesc: string;
+  commitMachineType: string;
+  commitMachineDesc: string;
+  streakMasterType: string;
+  streakMasterDesc: string;
+  emojiEnthusiastType: string;
+  emojiEnthusiastDesc: string;
+  prChampionType: string;
+  prChampionDesc: string;
+  steadyBuilderType: string;
+  steadyBuilderDesc: string;
+}
+
+const translations: Record<Language, Translations> = {
+  english: {
+    unwrapped: "Unwrapped",
+    yearInReview: "Year in Review",
+    byTheNumbers: "By The Numbers",
+    topContributors: "Top Contributors",
+    activityPatterns: "Activity Patterns",
+    funFacts: "Fun Facts",
+    commitMessageWordCloud: "Commit Message Word Cloud",
+    mostChangedFiles: "Most Changed Files",
+    releasesThisYear: "Releases This Year",
+    commitsPushedThisYear: "commits pushed this year",
+    linesAdded: "Lines Added",
+    linesDeleted: "Lines Deleted",
+    pullRequestsMerged: "Pull Requests Merged",
+    releases: "Releases",
+    avgCommitsPerWeek: "Avg Commits/Week",
+    longestStreak: "Longest Streak",
+    days: "days",
+    nightOwlCommits: "Night Owl Commits",
+    nightOwlCommitsDesc: "commits between 10pm - 6am",
+    weekendWarrior: "Weekend Warrior",
+    weekendWarriorDesc: "commits on weekends",
+    busiestDay: "Busiest Day",
+    busiestDayDesc: "commits on",
+    emojiUsage: "Emoji Usage",
+    emojiUsageDesc: "emojis in commit messages",
+    fastestPRMerge: "Fastest PR Merge",
+    longestPR: "Longest PR",
+    commitsByMonth: "Commits by Month",
+    commitsByDay: "Commits by Day",
+    commitsByHour: "Commits by Hour",
+    fileTypesChanged: "File Types Changed",
+    generatedWith: "Generated with ❤️ by",
+    yourYearInCode: "Your year in code, unwrapped!",
+    commits: "commits",
+    aiYearInReview: "AI Year in Review",
+    whatYouShipped: "What You Shipped",
+    nightOwlType: "Night Owl 🦉",
+    nightOwlDesc: "You thrive when the world sleeps. Your best code happens after midnight.",
+    weekendWarriorType: "Weekend Warrior 💪",
+    weekendWarriorTypeDesc: "Who needs rest? You ship code while others are relaxing.",
+    commitMachineType: "Commit Machine 🤖",
+    commitMachineDesc: "You're a coding powerhouse. Small, frequent commits keep the project moving.",
+    streakMasterType: "Streak Master 🔥",
+    streakMasterDesc: "Consistency is your superpower. Your commit streak is legendary.",
+    emojiEnthusiastType: "Emoji Enthusiast ✨",
+    emojiEnthusiastDesc: "Your commit messages are works of art, complete with expressive emojis.",
+    prChampionType: "PR Champion 🏆",
+    prChampionDesc: "You're a collaboration hero, merging PRs and keeping the team unblocked.",
+    steadyBuilderType: "Steady Builder 🏗️",
+    steadyBuilderDesc: "You're the reliable backbone of the project. Consistent and dependable.",
+  },
+  german: {
+    unwrapped: "Unwrapped",
+    yearInReview: "Jahresrückblick",
+    byTheNumbers: "Die Zahlen",
+    topContributors: "Top Mitwirkende",
+    activityPatterns: "Aktivitätsmuster",
+    funFacts: "Wissenswertes",
+    commitMessageWordCloud: "Commit-Nachrichten Wortwolke",
+    mostChangedFiles: "Am meisten geänderte Dateien",
+    releasesThisYear: "Releases dieses Jahr",
+    commitsPushedThisYear: "Commits dieses Jahr",
+    linesAdded: "Zeilen hinzugefügt",
+    linesDeleted: "Zeilen gelöscht",
+    pullRequestsMerged: "Pull Requests gemerged",
+    releases: "Releases",
+    avgCommitsPerWeek: "Ø Commits/Woche",
+    longestStreak: "Längste Serie",
+    days: "Tage",
+    nightOwlCommits: "Nacht-Eule Commits",
+    nightOwlCommitsDesc: "Commits zwischen 22-6 Uhr",
+    weekendWarrior: "Wochenend-Krieger",
+    weekendWarriorDesc: "Commits am Wochenende",
+    busiestDay: "Aktivster Tag",
+    busiestDayDesc: "Commits am",
+    emojiUsage: "Emoji-Nutzung",
+    emojiUsageDesc: "Emojis in Commit-Nachrichten",
+    fastestPRMerge: "Schnellster PR Merge",
+    longestPR: "Längster PR",
+    commitsByMonth: "Commits pro Monat",
+    commitsByDay: "Commits pro Tag",
+    commitsByHour: "Commits pro Stunde",
+    fileTypesChanged: "Geänderte Dateitypen",
+    generatedWith: "Erstellt mit ❤️ von",
+    yourYearInCode: "Dein Jahr in Code, unwrapped!",
+    commits: "Commits",
+    aiYearInReview: "KI Jahresrückblick",
+    whatYouShipped: "Was du geliefert hast",
+    nightOwlType: "Nacht-Eule 🦉",
+    nightOwlDesc: "Du blühst auf, wenn die Welt schläft. Dein bester Code entsteht nach Mitternacht.",
+    weekendWarriorType: "Wochenend-Krieger 💪",
+    weekendWarriorTypeDesc: "Wer braucht schon Pause? Du lieferst Code, während andere sich ausruhen.",
+    commitMachineType: "Commit-Maschine 🤖",
+    commitMachineDesc: "Du bist eine Code-Kraftwerk. Kleine, häufige Commits halten das Projekt in Bewegung.",
+    streakMasterType: "Serien-Meister 🔥",
+    streakMasterDesc: "Beständigkeit ist deine Superkraft. Deine Commit-Serie ist legendär.",
+    emojiEnthusiastType: "Emoji-Enthusiast ✨",
+    emojiEnthusiastDesc: "Deine Commit-Nachrichten sind Kunstwerke, komplett mit ausdrucksstarken Emojis.",
+    prChampionType: "PR-Champion 🏆",
+    prChampionDesc: "Du bist ein Kollaborations-Held, mergst PRs und hältst das Team am Laufen.",
+    steadyBuilderType: "Verlässlicher Baumeister 🏗️",
+    steadyBuilderDesc: "Du bist das zuverlässige Rückgrat des Projekts. Konstant und verlässlich.",
+  },
+};
+
+function t(key: keyof Translations, language: Language = "english"): string {
+  return translations[language][key];
 }
 
 /**
@@ -688,15 +857,12 @@ export async function generateUnwrappedHTML(
   stats: UnwrappedStats,
   options: UnwrappedOptions = {}
 ): Promise<string> {
-  const { onProgress = () => { } } = options;
+  const { onProgress = () => { }, language = "english" } = options;
 
-  onProgress("🎨 Generating AI summary...");
+  onProgress("🎨 Generating AI year-in-review...");
 
-  // Generate AI summary
-  const summary = await generateAISummary(stats);
-
-  onProgress("📦 Summarizing new features...");
-  const featuresSummary = await generateFeaturesSummary(stats);
+  // Generate comprehensive AI summary (includes both overview and features)
+  const summary = await generateAISummary(stats, language);
 
   onProgress("✨ Creating beautiful HTML report...");
 
@@ -708,7 +874,7 @@ export async function generateUnwrappedHTML(
     });
 
   // Calculate personality type based on stats
-  const personality = getDevPersonality(stats);
+  const personality = getDevPersonality(stats, language);
 
   // Generate chart data
   const monthlyData = JSON.stringify(stats.commitsByMonth);
@@ -717,11 +883,11 @@ export async function generateUnwrappedHTML(
   const fileTypeData = JSON.stringify(stats.fileTypesChanged.slice(0, 6));
 
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="${language === "german" ? "de" : "en"}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${stats.repoOwner}/${stats.repoName} - Unwrapped ${new Date().getFullYear()}</title>
+  <title>${stats.repoOwner}/${stats.repoName} - ${t("unwrapped", language)} ${new Date().getFullYear()}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -1240,17 +1406,17 @@ export async function generateUnwrappedHTML(
 </head>
 <body>
   <div class="hero">
-    <h1>🎉 Unwrapped</h1>
+    <h1>🎉 ${t("unwrapped", language)}</h1>
     <p class="repo-name">${stats.repoOwner}/${stats.repoName}</p>
     <p class="date-range">${formatDate(stats.startDate)} - ${formatDate(stats.endDate)}</p>
-    <div class="year-badge">${new Date().getFullYear()} Year in Review</div>
+    <div class="year-badge">${new Date().getFullYear()} ${t("yearInReview", language)}</div>
   </div>
   
   <div class="container">
     <!-- Big Stats -->
     <div class="big-stat">
       <div class="number">${stats.totalCommits.toLocaleString()}</div>
-      <div class="label">commits pushed this year</div>
+      <div class="label">${t("commitsPushedThisYear", language)}</div>
     </div>
     
     <!-- Developer Personality -->
@@ -1262,50 +1428,42 @@ export async function generateUnwrappedHTML(
       </div>
     </div>
     
-    <!-- AI Summary -->
+    <!-- AI Year-in-Review (comprehensive summary) -->
     <div class="ai-summary">
-      <h3>🤖 AI Year in Review</h3>
+      <h3>🤖 ${t("aiYearInReview", language)}</h3>
       <div class="ai-content">${summary}</div>
     </div>
-    
-    <!-- Features Summary -->
-    ${featuresSummary ? `
-    <div class="features-summary">
-      <h3>📦 What You Shipped</h3>
-      <div class="features-content">${featuresSummary}</div>
-    </div>
-    ` : ''}
     
     <!-- Quick Stats Cards -->
     <div class="section-header">
       <span class="emoji">📈</span>
-      <h2>By The Numbers</h2>
+      <h2>${t("byTheNumbers", language)}</h2>
     </div>
-    
+
     <div class="cards-grid">
       <div class="card">
-        <div class="card-label">Lines Added</div>
+        <div class="card-label">${t("linesAdded", language)}</div>
         <div class="card-value green">+${stats.linesAdded.toLocaleString()}</div>
       </div>
       <div class="card">
-        <div class="card-label">Lines Deleted</div>
+        <div class="card-label">${t("linesDeleted", language)}</div>
         <div class="card-value pink">-${stats.linesDeleted.toLocaleString()}</div>
       </div>
       <div class="card">
-        <div class="card-label">Pull Requests Merged</div>
+        <div class="card-label">${t("pullRequestsMerged", language)}</div>
         <div class="card-value cyan">${stats.mergedPRs}</div>
       </div>
       <div class="card">
-        <div class="card-label">Releases</div>
+        <div class="card-label">${t("releases", language)}</div>
         <div class="card-value">${stats.totalReleases}</div>
       </div>
       <div class="card">
-        <div class="card-label">Avg Commits/Week</div>
+        <div class="card-label">${t("avgCommitsPerWeek", language)}</div>
         <div class="card-value green">${stats.averageCommitsPerWeek}</div>
       </div>
       <div class="card">
-        <div class="card-label">Longest Streak</div>
-        <div class="card-value pink">${stats.longestStreak} days</div>
+        <div class="card-label">${t("longestStreak", language)}</div>
+        <div class="card-value pink">${stats.longestStreak} ${t("days", language)}</div>
       </div>
     </div>
     
@@ -1313,7 +1471,7 @@ export async function generateUnwrappedHTML(
     ${stats.topAuthors.length > 0 ? `
     <div class="section-header">
       <span class="emoji">🏆</span>
-      <h2>Top Contributors</h2>
+      <h2>${t("topContributors", language)}</h2>
     </div>
     
     <div class="author-list">
@@ -1335,27 +1493,27 @@ export async function generateUnwrappedHTML(
     <!-- Charts -->
     <div class="section-header">
       <span class="emoji">📊</span>
-      <h2>Activity Patterns</h2>
+      <h2>${t("activityPatterns", language)}</h2>
     </div>
-    
+
     <div class="cards-grid">
       <div class="chart-container">
-        <div class="chart-title">Commits by Month</div>
+        <div class="chart-title">${t("commitsByMonth", language)}</div>
         <canvas id="monthlyChart"></canvas>
       </div>
       <div class="chart-container">
-        <div class="chart-title">Commits by Day</div>
+        <div class="chart-title">${t("commitsByDay", language)}</div>
         <canvas id="dayChart"></canvas>
       </div>
     </div>
-    
+
     <div class="cards-grid">
       <div class="chart-container">
-        <div class="chart-title">Commits by Hour</div>
+        <div class="chart-title">${t("commitsByHour", language)}</div>
         <canvas id="hourChart"></canvas>
       </div>
       <div class="chart-container">
-        <div class="chart-title">File Types Changed</div>
+        <div class="chart-title">${t("fileTypesChanged", language)}</div>
         <canvas id="fileTypeChart"></canvas>
       </div>
     </div>
@@ -1363,43 +1521,43 @@ export async function generateUnwrappedHTML(
     <!-- Fun Facts -->
     <div class="section-header">
       <span class="emoji">🎯</span>
-      <h2>Fun Facts</h2>
+      <h2>${t("funFacts", language)}</h2>
     </div>
-    
+
     <div class="fun-facts">
       <div class="fun-fact">
         <div class="emoji">🌙</div>
         <div class="text">
-          <h4>Night Owl Commits</h4>
-          <p>${stats.nightOwlCommits} commits between 10pm - 6am</p>
+          <h4>${t("nightOwlCommits", language)}</h4>
+          <p>${stats.nightOwlCommits} ${t("nightOwlCommitsDesc", language)}</p>
         </div>
       </div>
       <div class="fun-fact">
         <div class="emoji">🏖️</div>
         <div class="text">
-          <h4>Weekend Warrior</h4>
-          <p>${stats.weekendWarriorCommits} commits on weekends</p>
+          <h4>${t("weekendWarrior", language)}</h4>
+          <p>${stats.weekendWarriorCommits} ${t("weekendWarriorDesc", language)}</p>
         </div>
       </div>
       <div class="fun-fact">
         <div class="emoji">🔥</div>
         <div class="text">
-          <h4>Busiest Day</h4>
-          <p>${stats.busiestDay.count} commits on ${stats.busiestDay.date}</p>
+          <h4>${t("busiestDay", language)}</h4>
+          <p>${stats.busiestDay.count} ${t("busiestDayDesc", language)} ${stats.busiestDay.date}</p>
         </div>
       </div>
       <div class="fun-fact">
         <div class="emoji">😀</div>
         <div class="text">
-          <h4>Emoji Usage</h4>
-          <p>${stats.emojiCount} emojis in commit messages</p>
+          <h4>${t("emojiUsage", language)}</h4>
+          <p>${stats.emojiCount} ${t("emojiUsageDesc", language)}</p>
         </div>
       </div>
       ${stats.fastestMerge ? `
       <div class="fun-fact">
         <div class="emoji">⚡</div>
         <div class="text">
-          <h4>Fastest PR Merge</h4>
+          <h4>${t("fastestPRMerge", language)}</h4>
           <p>"${stats.fastestMerge.title.substring(0, 40)}..." in ${stats.fastestMerge.hours}h</p>
         </div>
       </div>
@@ -1408,8 +1566,8 @@ export async function generateUnwrappedHTML(
       <div class="fun-fact">
         <div class="emoji">🐢</div>
         <div class="text">
-          <h4>Longest PR</h4>
-          <p>"${stats.slowestMerge.title.substring(0, 40)}..." took ${stats.slowestMerge.days} days</p>
+          <h4>${t("longestPR", language)}</h4>
+          <p>"${stats.slowestMerge.title.substring(0, 40)}..." took ${stats.slowestMerge.days} ${t("days", language)}</p>
         </div>
       </div>
       ` : ''}
@@ -1418,7 +1576,7 @@ export async function generateUnwrappedHTML(
     <!-- Most Common Words -->
     <div class="section-header">
       <span class="emoji">💬</span>
-      <h2>Commit Message Word Cloud</h2>
+      <h2>${t("commitMessageWordCloud", language)}</h2>
     </div>
     
     <div class="chart-container">
@@ -1432,7 +1590,7 @@ export async function generateUnwrappedHTML(
     <!-- Most Changed Files -->
     <div class="section-header">
       <span class="emoji">📁</span>
-      <h2>Most Changed Files</h2>
+      <h2>${t("mostChangedFiles", language)}</h2>
     </div>
     
     <div class="chart-container">
@@ -1450,7 +1608,7 @@ export async function generateUnwrappedHTML(
     ${stats.releases.length > 0 ? `
     <div class="section-header">
       <span class="emoji">🏷️</span>
-      <h2>Releases This Year</h2>
+      <h2>${t("releasesThisYear", language)}</h2>
     </div>
     
     <div class="cards-grid">
@@ -1466,8 +1624,8 @@ export async function generateUnwrappedHTML(
   </div>
   
   <div class="footer">
-    <p>Generated with ❤️ by <a href="https://github.com/mr-mrs-panda/git-ai-cli">Git AI CLI</a></p>
-    <p style="margin-top: 0.5rem;">🎵 Your year in code, unwrapped!</p>
+    <p>${t("generatedWith", language)} <a href="https://github.com/mr-mrs-panda/git-ai-cli">Git AI CLI</a></p>
+    <p style="margin-top: 0.5rem;">🎵 ${t("yourYearInCode", language)}</p>
   </div>
   
   <script>
@@ -1570,7 +1728,7 @@ export async function generateUnwrappedHTML(
   return html;
 }
 
-function getDevPersonality(stats: UnwrappedStats): {
+function getDevPersonality(stats: UnwrappedStats, language: Language = "english"): {
   type: string;
   emoji: string;
   description: string;
@@ -1580,71 +1738,69 @@ function getDevPersonality(stats: UnwrappedStats): {
 
   if (nightRatio > 0.3) {
     return {
-      type: "Night Owl 🦉",
+      type: t("nightOwlType", language),
       emoji: "🌙",
-      description:
-        "You thrive when the world sleeps. Your best code happens after midnight.",
+      description: t("nightOwlDesc", language),
     };
   }
 
   if (weekendRatio > 0.4) {
     return {
-      type: "Weekend Warrior 💪",
+      type: t("weekendWarriorType", language),
       emoji: "🏋️",
-      description:
-        "Who needs rest? You ship code while others are relaxing.",
+      description: t("weekendWarriorTypeDesc", language),
     };
   }
 
   if (stats.averageCommitsPerWeek > 20) {
     return {
-      type: "Commit Machine 🤖",
+      type: t("commitMachineType", language),
       emoji: "⚙️",
-      description:
-        "You're a coding powerhouse. Small, frequent commits keep the project moving.",
+      description: t("commitMachineDesc", language),
     };
   }
 
   if (stats.longestStreak > 14) {
     return {
-      type: "Streak Master 🔥",
+      type: t("streakMasterType", language),
       emoji: "🔥",
-      description:
-        "Consistency is your superpower. Your commit streak is legendary.",
+      description: t("streakMasterDesc", language),
     };
   }
 
   if (stats.emojiCount > 20) {
     return {
-      type: "Emoji Enthusiast ✨",
+      type: t("emojiEnthusiastType", language),
       emoji: "🎨",
-      description:
-        "Your commit messages are works of art, complete with expressive emojis.",
+      description: t("emojiEnthusiastDesc", language),
     };
   }
 
   if (stats.mergedPRs > 20) {
     return {
-      type: "PR Champion 🏆",
+      type: t("prChampionType", language),
       emoji: "🚀",
-      description:
-        "You're a collaboration hero, merging PRs and keeping the team unblocked.",
+      description: t("prChampionDesc", language),
     };
   }
 
   return {
-    type: "Steady Builder 🏗️",
+    type: t("steadyBuilderType", language),
     emoji: "🛠️",
-    description:
-      "You're the reliable backbone of the project. Consistent and dependable.",
+    description: t("steadyBuilderDesc", language),
   };
 }
 
-async function generateAISummary(stats: UnwrappedStats): Promise<string> {
+async function generateAISummary(stats: UnwrappedStats, language: Language = "english"): Promise<string> {
   try {
     const config = await loadConfig();
 
-    const fallbackHtml = `<p>🚀 This year, <strong>${stats.repoOwner}/${stats.repoName}</strong> saw <strong>${stats.totalCommits}</strong> commits from ${stats.topAuthors.length} contributors.</p>
+    const fallbackHtml = language === "german"
+      ? `<p>🚀 Dieses Jahr gab es bei <strong>${stats.repoOwner}/${stats.repoName}</strong> <strong>${stats.totalCommits}</strong> Commits von ${stats.topAuthors.length} Mitwirkenden.</p>
+<p>Das Team fügte <strong>+${stats.linesAdded.toLocaleString()}</strong> Zeilen hinzu und entfernte <strong>-${stats.linesDeleted.toLocaleString()}</strong> Zeilen Code.</p>
+${stats.mergedPRs > 0 ? `<p><strong>${stats.mergedPRs}</strong> Pull Requests wurden gemerged und das Projekt lieferte <strong>${stats.totalReleases}</strong> Releases.</p>` : `<p>Das Projekt lieferte <strong>${stats.totalReleases}</strong> Releases.</p>`}
+<p>🎉 Weiter so!</p>`
+      : `<p>🚀 This year, <strong>${stats.repoOwner}/${stats.repoName}</strong> saw <strong>${stats.totalCommits}</strong> commits from ${stats.topAuthors.length} contributors.</p>
 <p>The team added <strong>+${stats.linesAdded.toLocaleString()}</strong> lines and removed <strong>-${stats.linesDeleted.toLocaleString()}</strong> lines of code.</p>
 ${stats.mergedPRs > 0 ? `<p><strong>${stats.mergedPRs}</strong> pull requests were merged and the project shipped <strong>${stats.totalReleases}</strong> releases.</p>` : `<p>The project shipped <strong>${stats.totalReleases}</strong> releases.</p>`}
 <p>🎉 Keep up the great work!</p>`;
@@ -1655,10 +1811,74 @@ ${stats.mergedPRs > 0 ? `<p><strong>${stats.mergedPRs}</strong> pull requests we
 
     const client = new OpenAI({ apiKey: config.openaiApiKey });
 
-    // Prepare release titles for context
-    const releaseTitles = stats.releases
-      .map((r) => `${r.tag}: ${r.name}`)
-      .join("\n");
+    // Generate monthly release summaries if there are releases
+    let monthlyReleaseSummaries = "";
+    if (stats.releases.length > 0) {
+      // Group releases by month
+      const releasesByMonth = new Map<string, typeof stats.releases>();
+      for (const release of stats.releases) {
+        const date = new Date(release.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const monthReleases = releasesByMonth.get(monthKey) || [];
+        monthReleases.push(release);
+        releasesByMonth.set(monthKey, monthReleases);
+      }
+
+      // Generate summaries for each month in parallel
+      const monthSummaryPromises = Array.from(releasesByMonth.entries()).map(async ([monthKey, releases]) => {
+        const [year, month] = monthKey.split('-');
+        const monthName = new Date(parseInt(year!), parseInt(month!) - 1).toLocaleDateString(
+          language === "german" ? "de-DE" : "en-US",
+          { month: "long", year: "numeric" }
+        );
+
+        // Build release info for this month
+        const releaseInfo = releases
+          .map((r) => {
+            let info = `${r.tag}: ${r.name}`;
+            if (r.body) {
+              const body = r.body.length > 600 ? r.body.substring(0, 600) + "..." : r.body;
+              info += `\n${body}`;
+            }
+            return info;
+          })
+          .join("\n\n");
+
+        const prompt = language === "german"
+          ? `Fasse die ${releases.length} Releases für ${monthName} in 2-3 prägnanten Bullet Points zusammen. Fokussiere auf die wichtigsten Features/Änderungen.
+
+${releaseInfo}
+
+Ausgabe als einfache Bullet-Liste (•) ohne Überschriften.`
+          : `Summarize the ${releases.length} releases for ${monthName} in 2-3 concise bullet points. Focus on the most important features/changes.
+
+${releaseInfo}
+
+Output as simple bullet list (•) without headings.`;
+
+        try {
+          const response = await client.chat.completions.create({
+            model: config.model || "gpt-5.2",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7,
+          });
+
+          const content = response.choices[0]?.message?.content?.trim() || "";
+          return { monthName, summary: content, releaseCount: releases.length };
+        } catch {
+          return { monthName, summary: "", releaseCount: releases.length };
+        }
+      });
+
+      const monthSummaries = await Promise.all(monthSummaryPromises);
+      const validSummaries = monthSummaries.filter(m => m.summary);
+
+      if (validSummaries.length > 0) {
+        monthlyReleaseSummaries = validSummaries
+          .map(m => `**${m.monthName}** (${m.releaseCount} ${language === "german" ? "Releases" : "releases"}):\n${m.summary}`)
+          .join("\n\n");
+      }
+    }
 
     // Sample commit messages (take a good spread - first 50, last 50, or all if < 100)
     let commitSample: string[];
@@ -1671,7 +1891,71 @@ ${stats.mergedPRs > 0 ? `<p><strong>${stats.mergedPRs}</strong> pull requests we
     }
     const commitList = commitSample.join("\n");
 
-    const prompt = `You are a friendly, upbeat AI writing a "Year in Review" summary for a GitHub repository - like Spotify Wrapped but for code!
+    const prompt = language === "german"
+      ? `Du bist eine freundliche, positive KI, die einen "Jahresrückblick" für ein GitHub-Repository schreibt - wie Spotify Wrapped, aber für Code!
+
+Analysiere das Jahr des Repositories basierend auf den Statistiken UND den tatsächlichen Commit-Nachrichten und Releases, um eine packende Geschichte zu erzählen.
+
+## Repository-Statistiken
+- Repository: ${stats.repoOwner}/${stats.repoName}
+- Commits insgesamt: ${stats.totalCommits}
+- Top-Autor: ${stats.mostActiveAuthor?.name || 'Unbekannt'} (${stats.mostActiveAuthor?.commits || 0} Commits)
+- Zeilen hinzugefügt: ${stats.linesAdded.toLocaleString()}
+- Zeilen gelöscht: ${stats.linesDeleted.toLocaleString()}
+- Pull Requests gemerged: ${stats.mergedPRs}
+- Releases: ${stats.totalReleases}
+- Nacht-Eule Commits (22-6 Uhr): ${stats.nightOwlCommits}
+- Wochenend-Commits: ${stats.weekendWarriorCommits}
+- Längste Serie: ${stats.longestStreak} Tage
+- Aktivster Tag: ${stats.busiestDay.date} mit ${stats.busiestDay.count} Commits
+- Häufigste Wörter: ${stats.mostCommonWords.slice(0, 5).map(w => w.word).join(', ')}
+
+${monthlyReleaseSummaries ? `## Monats-Release-Highlights (${stats.releases.length} Releases insgesamt)
+${monthlyReleaseSummaries}` : ''}
+
+## Beispiel Commit-Nachrichten
+${commitList}
+
+---
+
+Erstelle eine **umfassende HTML-Zusammenfassung** in ZWEI Teilen:
+
+**TEIL 1: Jahresüberblick** (2-3 Absätze, Spotify-Wrapped-Stil)
+- Feiere die Zahlen und Errungenschaften
+- Hebe interessante Muster hervor (Nacht-Eule, Streaks, etc.)
+- Packend und feierlich
+
+**TEIL 2: Was ihr geliefert habt** (Kategorisierte Feature-Liste basierend auf den Monats-Highlights)
+- Gruppiere in: 🚀 Features, 🐛 Bug Fixes, 🔧 Verbesserungen, etc.
+- Max 4-5 Bullet Points pro Kategorie
+- Zeige das Gesamtbild über das ganze Jahr
+
+Format:
+<p>🚀 Was für ein Jahr für <strong>repo-name</strong>! Ihr habt <strong>${stats.totalCommits} Commits</strong> gemacht und <strong>${stats.totalReleases} Releases</strong> ausgeliefert...</p>
+<p>Weitere Details zu Patterns...</p>
+
+<div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+  <h4 style="color: #3fb950; margin-bottom: 1.5rem; font-size: 1.2rem;">📦 Was ihr dieses Jahr geliefert habt</h4>
+  <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+    <div>
+      <div style="color: #f0f6fc; font-weight: 600; margin-bottom: 0.5rem;">🚀 Neue Features</div>
+      <ul style="margin: 0; padding-left: 1.5rem; color: #8b949e;">
+        <li>Feature X - Beschreibung</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color: #f0f6fc; font-weight: 600; margin-bottom: 0.5rem;">🔧 Verbesserungen</div>
+      <ul style="margin: 0; padding-left: 1.5rem; color: #8b949e;">
+        <li>Verbesserung A</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top: 1.5rem;">🎉 Abschluss-Celebration!</p>
+
+AUSGABE NUR DAS HTML, sonst nichts.`
+      : `You are a friendly, upbeat AI writing a "Year in Review" summary for a GitHub repository - like Spotify Wrapped but for code!
 
 Analyze the repository's year based on both the statistics AND the actual commit messages and releases to tell a compelling story.
 
@@ -1689,42 +1973,49 @@ Analyze the repository's year based on both the statistics AND the actual commit
 - Busiest Day: ${stats.busiestDay.date} with ${stats.busiestDay.count} commits
 - Most Used Words: ${stats.mostCommonWords.slice(0, 5).map(w => w.word).join(', ')}
 
-${stats.releases.length > 0 ? `## Releases This Year
-${releaseTitles}` : ''}
+${monthlyReleaseSummaries ? `## Monthly Release Highlights (${stats.releases.length} releases total)
+${monthlyReleaseSummaries}` : ''}
 
-## Sample Commit Messages (to understand what was worked on)
+## Sample Commit Messages
 ${commitList}
 
 ---
 
-Based on ALL of this information, write a fun, insightful 3-4 sentence summary that:
-1. Identifies the main themes/features that were worked on this year (based on commits & releases)
-2. Highlights an interesting pattern or achievement
-3. Has a celebratory, Spotify-Wrapped-style tone
-4. Mentions specific things that happened (not just numbers)
+Create a **comprehensive HTML summary** in TWO parts:
 
-Be creative and tell the story of this repository's year!
+**PART 1: Year Overview** (2-3 paragraphs, Spotify-Wrapped style)
+- Celebrate the numbers and achievements
+- Highlight interesting patterns (night owl, streaks, etc.)
+- Engaging and celebratory
 
-Write in **simple HTML format** (will be embedded in a styled container).
+**PART 2: What You Shipped** (Categorized feature list based on monthly highlights)
+- Group into: 🚀 Features, 🐛 Bug Fixes, 🔧 Improvements, etc.
+- Max 4-5 bullet points per category
+- Show the big picture across the whole year
 
-RULES:
-1. Use <p> tags for paragraphs
-2. Use <strong> for emphasis on key achievements/numbers
-3. Use <ul><li> for listing main themes/features worked on
-4. Use emojis liberally 🎉🚀💪
-5. 3-4 short paragraphs max
-6. Be celebratory, Spotify-Wrapped-style!
-7. Mention SPECIFIC things that happened (features, fixes, improvements based on commits)
+Format:
+<p>🚀 What a year for <strong>repo-name</strong>! You made <strong>${stats.totalCommits} commits</strong> and shipped <strong>${stats.totalReleases} releases</strong>...</p>
+<p>More details about patterns...</p>
 
-Example format:
-<p>🚀 What a year for <strong>repo-name</strong>! You shipped <strong>X releases</strong> including the amazing <strong>feature Y</strong>.</p>
-<p>Your main focus areas were:</p>
-<ul>
-  <li>💡 Feature A and B</li>
-  <li>🐛 Bug fixes and improvements</li>
-  <li>🔧 Refactoring and cleanup</li>
-</ul>
-<p>🎉 Keep shipping amazing code!</p>
+<div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+  <h4 style="color: #3fb950; margin-bottom: 1.5rem; font-size: 1.2rem;">📦 What You Shipped This Year</h4>
+  <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+    <div>
+      <div style="color: #f0f6fc; font-weight: 600; margin-bottom: 0.5rem;">🚀 New Features</div>
+      <ul style="margin: 0; padding-left: 1.5rem; color: #8b949e;">
+        <li>Feature X - Description</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color: #f0f6fc; font-weight: 600; margin-bottom: 0.5rem;">🔧 Improvements</div>
+      <ul style="margin: 0; padding-left: 1.5rem; color: #8b949e;">
+        <li>Improvement A</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top: 1.5rem;">🎉 Closing celebration!</p>
 
 OUTPUT ONLY THE HTML, nothing else.`;
 
@@ -1745,96 +2036,17 @@ OUTPUT ONLY THE HTML, nothing else.`;
       return `<p>${content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
     }
 
-    return `<p>What a year for <strong>${stats.repoName}</strong>! ${stats.totalCommits} commits and counting. 🎉</p>`;
+    return language === "german"
+      ? `<p>Was für ein Jahr für <strong>${stats.repoName}</strong>! ${stats.totalCommits} Commits und es geht weiter. 🎉</p>`
+      : `<p>What a year for <strong>${stats.repoName}</strong>! ${stats.totalCommits} commits and counting. 🎉</p>`;
   } catch {
-    return `<p>This year, <strong>${stats.repoOwner}/${stats.repoName}</strong> saw <strong>${stats.totalCommits}</strong> commits.</p>
+    return language === "german"
+      ? `<p>Dieses Jahr gab es bei <strong>${stats.repoOwner}/${stats.repoName}</strong> <strong>${stats.totalCommits}</strong> Commits.</p>
+<p>Das Team fügte <span style="color: #3fb950;">+${stats.linesAdded.toLocaleString()}</span> Zeilen Code hinzu und lieferte <strong>${stats.totalReleases}</strong> Releases.</p>
+<p>🎉 Großartige Arbeit!</p>`
+      : `<p>This year, <strong>${stats.repoOwner}/${stats.repoName}</strong> saw <strong>${stats.totalCommits}</strong> commits.</p>
 <p>The team added <span style="color: #3fb950;">+${stats.linesAdded.toLocaleString()}</span> lines of code and shipped <strong>${stats.totalReleases}</strong> releases.</p>
 <p>🎉 Amazing work!</p>`;
   }
 }
 
-/**
- * Generate AI-powered features summary based on release notes
- */
-async function generateFeaturesSummary(stats: UnwrappedStats): Promise<string> {
-  // If no releases, return empty
-  if (stats.releases.length === 0) {
-    return "";
-  }
-
-  try {
-    const config = await loadConfig();
-
-    // Build release info with bodies
-    const releaseInfo = stats.releases
-      .map((r) => {
-        let info = `### ${r.tag}: ${r.name}`;
-        if (r.body) {
-          // Truncate very long release notes
-          const body = r.body.length > 1000 ? r.body.substring(0, 1000) + "..." : r.body;
-          info += `\n${body}`;
-        }
-        return info;
-      })
-      .join("\n\n");
-
-    const fallbackHtml = `<p>This year you shipped <strong>${stats.totalReleases} releases</strong>:</p>
-<ul>
-${stats.releases.slice(0, 5).map((r) => `  <li><strong>${r.tag}</strong>: ${r.name}</li>`).join("\n")}
-</ul>`;
-
-    if (!config.openaiApiKey) {
-      return fallbackHtml;
-    }
-
-    const client = new OpenAI({ apiKey: config.openaiApiKey });
-
-    const prompt = `You are an AI that summarizes software releases into a concise feature overview.
-
-Analyze these GitHub releases from the past year and create a **beautiful HTML summary** of the main features and improvements.
-
-## Releases
-${releaseInfo}
-
----
-
-Create a visually appealing HTML summary that:
-1. Groups features into categories (🚀 Features, 🐛 Bug Fixes, 🔧 Improvements, etc.)
-2. Highlights the most impactful changes
-3. Uses <strong> for key feature names
-4. Uses emojis for visual appeal
-5. Is concise - max 3-4 bullet points per category
-6. Only includes categories that have content
-
-Format:
-<div class="feature-category">
-  <h4>🚀 New Features</h4>
-  <ul>
-    <li><strong>Feature Name</strong> - Brief description</li>
-  </ul>
-</div>
-<div class="feature-category">
-  <h4>🔧 Improvements</h4>
-  <ul>
-    <li>Improvement 1</li>
-  </ul>
-</div>
-
-OUTPUT ONLY THE HTML, nothing else.`;
-
-    const response = await client.chat.completions.create({
-      model: config.model || "gpt-5.2",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const content = response.choices[0]?.message?.content?.trim();
-
-    if (content && (content.includes("<") || content.includes(">"))) {
-      return content;
-    }
-
-    return fallbackHtml;
-  } catch {
-    return `<p>Shipped <strong>${stats.totalReleases} releases</strong> this year! 🚀</p>`;
-  }
-}
