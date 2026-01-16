@@ -1610,9 +1610,9 @@ export async function generateUnwrappedHTML(
       <span class="emoji">🏷️</span>
       <h2>${t("releasesThisYear", language)}</h2>
     </div>
-    
+
     <div class="cards-grid">
-      ${stats.releases.slice(0, 6).map(r => `
+      ${stats.releases.map(r => `
         <div class="card">
           <div class="card-label">${new Date(r.date).toLocaleDateString()}</div>
           <div class="card-value" style="font-size: 1.5rem;">${r.tag}</div>
