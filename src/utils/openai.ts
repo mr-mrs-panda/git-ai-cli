@@ -307,6 +307,209 @@ DESCRIPTION: <one sentence description>`;
 }
 
 /**
+ * Commit group for multi-commit workflow
+ */
+export interface CommitGroup {
+  id: number;
+  type: string;
+  scope?: string;
+  description: string;
+  reasoning: string;
+  files: string[];
+  dependencies: number[];
+}
+
+/**
+ * Result of grouping analysis
+ */
+export interface GroupingResult {
+  groups: CommitGroup[];
+  totalGroups: number;
+}
+
+/**
+ * Analyze changes and group them into logical commits
+ */
+export async function analyzeAndGroupChanges(
+  changes: Array<{ path: string; status: string; diff: string }>,
+  branchName?: string
+): Promise<GroupingResult> {
+  const config = await loadConfig();
+  const client = await getOpenAIClient();
+
+  const changesText = changes
+    .map((change, i) => {
+      return `File ${i + 1}: ${change.path} (${change.status})\n${change.diff}\n`;
+    })
+    .join("\n---\n\n");
+
+  const branchContext = branchName
+    ? `Branch name: ${branchName}\nConsider the branch name context when grouping changes.\n\n`
+    : '';
+
+  const prompt = `You are an expert at organizing git changes into logical, atomic commits following Conventional Commits specification.
+
+Analyze the following changes and group them into logical commits:
+
+${branchContext}RULES:
+1. Create between 1 and 10 logical groups (use fewer if changes are related)
+2. Each group should be atomic and focused on a single purpose
+3. Use Conventional Commits types: feat, fix, refactor, chore, docs, test, perf, style
+4. Consider semantic relationships between files
+5. Respect module boundaries (e.g., services/*, commands/*, utils/*)
+6. Order groups so dependencies come before dependents (dependencies field lists IDs of groups that must be committed first)
+7. If all changes are closely related, create just 1 group (don't artificially split)
+
+GROUPING STRATEGY:
+- Group files that implement the same feature together
+- Separate different types of changes (feat vs test vs docs)
+- Keep refactoring separate from new features
+- Put tests with their corresponding implementation if tightly coupled, or separate if standalone
+
+FILES TO ANALYZE:
+${changesText}
+
+RESPOND WITH VALID JSON ONLY:
+{
+  "groups": [
+    {
+      "id": 1,
+      "type": "feat",
+      "scope": "auth",
+      "description": "Add JWT authentication",
+      "reasoning": "Core authentication implementation with token handling",
+      "files": ["src/services/auth.ts", "src/utils/jwt.ts"],
+      "dependencies": []
+    },
+    {
+      "id": 2,
+      "type": "test",
+      "scope": "auth",
+      "description": "Add authentication tests",
+      "reasoning": "Test coverage for JWT authentication",
+      "files": ["src/services/auth.test.ts"],
+      "dependencies": [1]
+    }
+  ],
+  "totalGroups": 2
+}
+
+IMPORTANT:
+- If changes belong to a single logical commit, create only 1 group
+- Maximum 10 groups
+- Scope is optional (omit if not applicable)
+- Dependencies should reference group IDs that must be committed first`;
+
+  const response = await client.chat.completions.create({
+    model: config.model || "gpt-5.2",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 1,
+    reasoning_effort: "medium", // Better analysis for grouping
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+
+  if (!content) {
+    throw new Error("Failed to analyze and group changes");
+  }
+
+  try {
+    const result = JSON.parse(content);
+    const groups = result.groups || [];
+
+    // Validate groups
+    if (!Array.isArray(groups) || groups.length === 0) {
+      throw new Error("No groups returned");
+    }
+
+    // If more than 10 groups, we need to consolidate
+    if (groups.length > 10) {
+      return await consolidateGroups(groups, branchName);
+    }
+
+    return {
+      groups: groups.map((g: any) => ({
+        id: g.id || 0,
+        type: g.type || "chore",
+        scope: g.scope,
+        description: g.description || "Update",
+        reasoning: g.reasoning || "",
+        files: g.files || [],
+        dependencies: g.dependencies || [],
+      })),
+      totalGroups: groups.length,
+    };
+  } catch (error) {
+    console.error("Failed to parse grouping result:", content);
+    throw new Error("Failed to parse grouping result");
+  }
+}
+
+/**
+ * Consolidate groups when AI suggests more than 10
+ */
+async function consolidateGroups(
+  groups: any[],
+  branchName?: string
+): Promise<GroupingResult> {
+  const config = await loadConfig();
+  const client = await getOpenAIClient();
+
+  const groupsText = groups
+    .map((g, i) => `Group ${i + 1}: ${g.type}${g.scope ? `(${g.scope})` : ""} - ${g.description}\nFiles: ${g.files?.join(", ") || ""}`)
+    .join("\n\n");
+
+  const prompt = `You previously created ${groups.length} commit groups, but that's too many. Consolidate them into maximum 10 logical groups.
+
+Original groups:
+${groupsText}
+
+RULES:
+1. Merge related groups together
+2. Maximum 10 groups
+3. Keep the same JSON format
+4. Maintain logical separation between different types of changes
+
+RESPOND WITH VALID JSON ONLY (same format as before).`;
+
+  const response = await client.chat.completions.create({
+    model: config.model || "gpt-5.2",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 1,
+    reasoning_effort: "medium",
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+
+  if (!content) {
+    throw new Error("Failed to consolidate groups");
+  }
+
+  try {
+    const result = JSON.parse(content);
+    const consolidatedGroups = result.groups || [];
+
+    return {
+      groups: consolidatedGroups.slice(0, 10).map((g: any) => ({
+        id: g.id || 0,
+        type: g.type || "chore",
+        scope: g.scope,
+        description: g.description || "Update",
+        reasoning: g.reasoning || "",
+        files: g.files || [],
+        dependencies: g.dependencies || [],
+      })),
+      totalGroups: Math.min(consolidatedGroups.length, 10),
+    };
+  } catch (error) {
+    console.error("Failed to parse consolidated groups:", content);
+    throw new Error("Failed to parse consolidated groups");
+  }
+}
+
+/**
  * PR information for release analysis
  */
 export interface PRInfo {
