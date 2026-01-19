@@ -118,14 +118,14 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
     spinner.stop(`Found ${includedChanges.length} file(s) with changes`);
 
     if (skippedChanges.length > 0) {
-      p.log.info(`Note: ${skippedChanges.length} large/migration file(s) will be skipped but grouped for tracking`);
+      p.log.info(`Note: ${skippedChanges.length} large/migration file(s) will be committed without AI analysis`);
     }
 
     // Get current branch name for context
     const currentBranch = await getCurrentBranch();
 
-    // Analyze and group ALL changes (including skipped files) with AI
-    // This allows us to track which group skipped files belong to
+    // Analyze and group ALL changes (including large files) with AI
+    // Large files are committed but their content is not sent to AI for analysis
     spinner.start("Grouping changes with AI...");
     const groupingResult = await analyzeAndGroupChanges(
       changes.map((c) => ({
@@ -398,8 +398,11 @@ function displayGroups(groups: CommitGroup[], skippedChanges: GitFileChange[]): 
     const header = `Group ${i + 1} of ${groups.length}: ${group.type}${group.scope ? `(${group.scope})` : ""} - ${group.description}`;
 
     const filesList = group.files.map((f) => {
-      const isSkipped = skippedChanges.some((s) => s.path === f);
-      return isSkipped ? `  • ${f} (will be skipped)` : `  • ${f}`;
+      const skippedFile = skippedChanges.find((s) => s.path === f);
+      if (skippedFile) {
+        return `  • ${f} (${skippedFile.skipReason} - content not analyzed)`;
+      }
+      return `  • ${f}`;
     }).join("\n");
     const content = `${filesList}\n\nReasoning: ${group.reasoning}`;
 
@@ -466,29 +469,17 @@ async function commitGroup(
   // Unstage all files
   await unstageAll();
 
-  // Check which files in this group were skipped
+  // Check which files in this group were skipped (too large for AI analysis)
   const groupSkippedFiles = skippedChanges.filter((c) => group.files.includes(c.path));
 
-  // Stage only non-skipped files for this group
-  const filesToStage = group.files.filter((f) => !groupSkippedFiles.some((s) => s.path === f));
-  if (filesToStage.length > 0) {
-    await stageFiles(filesToStage);
-  }
+  // Stage ALL files for this group (including skipped ones - they should be committed)
+  await stageFiles(group.files);
 
-  // Filter changes for this group's files
+  // Filter changes for this group's files (for AI analysis)
   const groupChanges = allChanges.filter((c) => group.files.includes(c.path));
 
   if (groupChanges.length === 0 && groupSkippedFiles.length === 0) {
     p.log.warn(`No changes found for group ${group.id}`);
-    return null;
-  }
-
-  if (groupChanges.length === 0 && groupSkippedFiles.length > 0) {
-    p.log.warn(`All files in group ${group.id} were skipped`);
-    p.note(
-      groupSkippedFiles.map((c) => `  ${c.path} - ${c.skipReason}`).join("\n"),
-      `Skipped files in group ${group.id}`
-    );
     return null;
   }
 
@@ -524,11 +515,11 @@ async function commitGroup(
     const hash = await getCurrentCommitHash();
     spinner.stop(`Commit ${groupIndex + 1} of ${totalGroups} created`);
 
-    // Show skipped files for this group if any
+    // Show large files that were committed without AI analysis
     if (groupSkippedFiles.length > 0) {
       p.note(
-        groupSkippedFiles.map((c) => `  ${c.path} - ${c.skipReason}`).join("\n"),
-        `Skipped files in this commit`
+        groupSkippedFiles.map((c) => `  ${c.path} - ${c.skipReason} (committed anyway)`).join("\n"),
+        `Files committed without AI analysis`
       );
     }
 
