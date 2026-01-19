@@ -223,26 +223,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Parse language flag
-  let languageValue: "english" | "german" = "english";
-  const languageFlagIndex = args.findIndex(arg => arg === "--language" || arg.startsWith("--language="));
-  if (languageFlagIndex !== -1) {
-    const languageArg = args[languageFlagIndex];
-    if (languageArg?.startsWith("--language=")) {
-      // Format: --language=german
-      const value = languageArg.split("=")[1]?.toLowerCase();
-      if (value === "german" || value === "english") {
-        languageValue = value;
-      }
-    } else {
-      // Format: --language german
-      const nextArg = args[languageFlagIndex + 1]?.toLowerCase();
-      if (nextArg === "german" || nextArg === "english") {
-        languageValue = nextArg;
-      }
-    }
-  }
-
   // Filter out flags to get the command
   // Also filter out language value if it follows --language flag
   const commandArgs = args.filter((arg, index) => {
