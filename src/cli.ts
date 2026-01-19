@@ -36,6 +36,7 @@ Options:
   -h, --help            Show this help message
   -v, --version         Show version
   -y, --yes             Auto-accept all prompts (blind mode)
+  --single              Create single commit instead of grouping (commit command only)
   --yolo                YOLO mode: auto-merge PR and delete branch
   --release             Release mode: auto workflow + merge + release (implies --yolo)
   --no-prs              Disable fetching PR info for release notes (PRs are included by default)
@@ -49,7 +50,9 @@ Examples:
   git-ai auto --release  # Full release workflow: commit → PR → merge → release
   git-ai prepare      # Prepare for a new feature
   git-ai branch       # Create branch from changes
-  git-ai commit       # Generate commit message
+  git-ai commit       # Generate multiple logical commits (default)
+  git-ai commit --single  # Create one commit with all changes (legacy mode)
+  git-ai commit -y    # Auto-accept all confirmations
   git-ai pr           # Generate PR suggestion
   git-ai release      # Create a release (includes PRs if GitHub token available)
   git-ai release --no-prs  # Release without PR info
@@ -198,6 +201,7 @@ async function main(): Promise<void> {
   const yoloFlag = args.includes("--yolo");
   const releaseFlag = args.includes("--release");
   const noPRsFlag = args.includes("--no-prs");
+  const singleFlag = args.includes("--single");
 
   // Parse language flag
   let languageValue: "english" | "german" = "english";
@@ -260,7 +264,7 @@ async function main(): Promise<void> {
     } else if (action === "branch") {
       await createBranch({ autoYes: yesFlag });
     } else if (action === "commit") {
-      await commit({ autoYes: yesFlag });
+      await commit({ autoYes: yesFlag, singleCommit: singleFlag });
     } else if (action === "pr") {
       await prSuggest({ autoYes: yesFlag });
     } else if (action === "release") {

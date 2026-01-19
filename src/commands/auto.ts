@@ -486,6 +486,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   const commitMessage = await generateAndCommit({
     confirmBeforeCommit: !effectiveAutoYes,
+    autoYes: effectiveAutoYes,
   });
 
   if (!commitMessage) {

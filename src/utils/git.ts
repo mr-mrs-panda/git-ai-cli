@@ -513,6 +513,77 @@ export async function stageAllChanges(): Promise<void> {
 }
 
 /**
+ * Stage specific files
+ */
+export async function stageFiles(filePaths: string[]): Promise<void> {
+  if (filePaths.length === 0) {
+    return;
+  }
+
+  const proc = Bun.spawn(["git", "add", ...filePaths], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to stage files: ${filePaths.join(", ")}`);
+  }
+}
+
+/**
+ * Unstage all files
+ */
+export async function unstageAll(): Promise<void> {
+  const proc = Bun.spawn(["git", "reset", "HEAD"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to unstage files");
+  }
+}
+
+/**
+ * Get current HEAD commit hash
+ */
+export async function getCurrentCommitHash(): Promise<string> {
+  const proc = Bun.spawn(["git", "rev-parse", "HEAD"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to get current commit hash");
+  }
+
+  const output = await new Response(proc.stdout).text();
+  return output.trim();
+}
+
+/**
+ * Create a commit with a message from a file
+ */
+export async function createCommitFromFile(messageFile: string): Promise<void> {
+  const proc = Bun.spawn(["git", "commit", "-F", messageFile], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to create commit");
+  }
+}
+
+/**
  * Check if we're in a git repository
  */
 export async function isGitRepository(): Promise<boolean> {
