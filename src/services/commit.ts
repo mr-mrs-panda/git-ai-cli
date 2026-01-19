@@ -117,16 +117,21 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
 
     spinner.stop(`Found ${includedChanges.length} file(s) with changes`);
 
+    if (skippedChanges.length > 0) {
+      p.log.info(`Note: ${skippedChanges.length} large/migration file(s) will be skipped but grouped for tracking`);
+    }
+
     // Get current branch name for context
     const currentBranch = await getCurrentBranch();
 
-    // Analyze and group changes with AI
+    // Analyze and group ALL changes (including skipped files) with AI
+    // This allows us to track which group skipped files belong to
     spinner.start("Grouping changes with AI...");
     const groupingResult = await analyzeAndGroupChanges(
-      includedChanges.map((c) => ({
+      changes.map((c) => ({
         path: c.path,
         status: c.status,
-        diff: c.diff,
+        diff: c.skipped ? `[File skipped: ${c.skipReason}]` : c.diff,
       })),
       currentBranch
     );
@@ -154,7 +159,7 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
     const sortedGroups = sortGroupsByDependencies(groupingResult.groups);
 
     // Display all groups
-    displayGroups(sortedGroups);
+    displayGroups(sortedGroups, skippedChanges);
 
     // Single confirmation for all groups
     if (!autoYes && confirmBeforeCommit) {
@@ -220,6 +225,7 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
         const commitInfo = await commitGroup(
           group,
           includedChanges,
+          skippedChanges,
           currentBranch,
           i,
           sortedGroups.length,
@@ -248,15 +254,6 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
     // Display summary
     if (result.commits.length > 0) {
       p.log.success(`\nSuccessfully created ${result.commits.length} commit(s)!`);
-
-      if (skippedChanges.length > 0) {
-        p.note(
-          skippedChanges
-            .map((c) => `  ${c.path} - ${c.skipReason}`)
-            .join("\n"),
-          "Skipped files"
-        );
-      }
     }
 
     return result;
@@ -391,7 +388,7 @@ async function generateAndCommitSingle(options: CommitOptions = {}): Promise<str
 /**
  * Display groups to user
  */
-function displayGroups(groups: CommitGroup[]): void {
+function displayGroups(groups: CommitGroup[], skippedChanges: GitFileChange[]): void {
   console.log(""); // Empty line before groups
 
   for (let i = 0; i < groups.length; i++) {
@@ -400,7 +397,10 @@ function displayGroups(groups: CommitGroup[]): void {
 
     const header = `Group ${i + 1} of ${groups.length}: ${group.type}${group.scope ? `(${group.scope})` : ""} - ${group.description}`;
 
-    const filesList = group.files.map((f) => `  • ${f}`).join("\n");
+    const filesList = group.files.map((f) => {
+      const isSkipped = skippedChanges.some((s) => s.path === f);
+      return isSkipped ? `  • ${f} (will be skipped)` : `  • ${f}`;
+    }).join("\n");
     const content = `${filesList}\n\nReasoning: ${group.reasoning}`;
 
     p.note(content, header);
@@ -456,6 +456,7 @@ function sortGroupsByDependencies(groups: CommitGroup[]): CommitGroup[] {
 async function commitGroup(
   group: CommitGroup,
   allChanges: GitFileChange[],
+  skippedChanges: GitFileChange[],
   branchName: string,
   groupIndex: number,
   totalGroups: number,
@@ -465,14 +466,29 @@ async function commitGroup(
   // Unstage all files
   await unstageAll();
 
-  // Stage only files for this group
-  await stageFiles(group.files);
+  // Check which files in this group were skipped
+  const groupSkippedFiles = skippedChanges.filter((c) => group.files.includes(c.path));
+
+  // Stage only non-skipped files for this group
+  const filesToStage = group.files.filter((f) => !groupSkippedFiles.some((s) => s.path === f));
+  if (filesToStage.length > 0) {
+    await stageFiles(filesToStage);
+  }
 
   // Filter changes for this group's files
   const groupChanges = allChanges.filter((c) => group.files.includes(c.path));
 
-  if (groupChanges.length === 0) {
+  if (groupChanges.length === 0 && groupSkippedFiles.length === 0) {
     p.log.warn(`No changes found for group ${group.id}`);
+    return null;
+  }
+
+  if (groupChanges.length === 0 && groupSkippedFiles.length > 0) {
+    p.log.warn(`All files in group ${group.id} were skipped`);
+    p.note(
+      groupSkippedFiles.map((c) => `  ${c.path} - ${c.skipReason}`).join("\n"),
+      `Skipped files in group ${group.id}`
+    );
     return null;
   }
 
@@ -507,6 +523,14 @@ async function commitGroup(
     // Get commit hash
     const hash = await getCurrentCommitHash();
     spinner.stop(`Commit ${groupIndex + 1} of ${totalGroups} created`);
+
+    // Show skipped files for this group if any
+    if (groupSkippedFiles.length > 0) {
+      p.note(
+        groupSkippedFiles.map((c) => `  ${c.path} - ${c.skipReason}`).join("\n"),
+        `Skipped files in this commit`
+      );
+    }
 
     return { message: commitMessage, hash };
   } finally {
