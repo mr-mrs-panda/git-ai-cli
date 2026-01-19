@@ -9,6 +9,7 @@ import { settings } from "./commands/settings.ts";
 import { cleanup } from "./commands/cleanup.ts";
 import { prepare } from "./commands/prepare.ts";
 import { release } from "./commands/release.ts";
+import { unwrapped } from "./commands/unwrapped.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
 import { Spinner } from "./utils/ui.ts";
 
@@ -20,23 +21,25 @@ Usage:
   git-ai [command]
 
 Commands:
-  auto     Smart workflow: branch → commit → push → PR
-  prepare  Prepare for a new feature: handle changes, checkout main, and pull
-  branch   Analyze changes and suggest a branch name
-  commit   Generate AI-powered commit message from staged changes
-  pr       Generate PR title and description from branch commits
-  release  Create a GitHub release with AI-generated release notes
-  cleanup  Delete local branches that are merged in remote
-  settings Configure AI model, reasoning effort, and other settings
-  help     Show this help message
+  auto      Smart workflow: branch → commit → push → PR
+  prepare   Prepare for a new feature: handle changes, checkout main, and pull
+  branch    Analyze changes and suggest a branch name
+  commit    Generate AI-powered commit message from staged changes
+  pr        Generate PR title and description from branch commits
+  release   Create a GitHub release with AI-generated release notes
+  unwrapped Your year in code - Spotify Wrapped style summary
+  cleanup   Delete local branches that are merged in remote
+  settings  Configure AI model, reasoning effort, and other settings
+  help      Show this help message
 
 Options:
-  -h, --help     Show this help message
-  -v, --version  Show version
-  -y, --yes      Auto-accept all prompts (blind mode)
-  --yolo         YOLO mode: auto-merge PR and delete branch
-  --release      Release mode: auto workflow + merge + release (implies --yolo)
-  --no-prs       Disable fetching PR info for release notes (PRs are included by default)
+  -h, --help            Show this help message
+  -v, --version         Show version
+  -y, --yes             Auto-accept all prompts (blind mode)
+  --yolo                YOLO mode: auto-merge PR and delete branch
+  --release             Release mode: auto workflow + merge + release (implies --yolo)
+  --no-prs              Disable fetching PR info for release notes (PRs are included by default)
+  --language <lang>     Language for unwrapped report (english or german, default: english)
 
 Examples:
   git-ai              # Interactive mode
@@ -50,6 +53,8 @@ Examples:
   git-ai pr           # Generate PR suggestion
   git-ai release      # Create a release (includes PRs if GitHub token available)
   git-ai release --no-prs  # Release without PR info
+  git-ai unwrapped    # Your year in code - Spotify Wrapped style summary
+  git-ai unwrapped --language german  # Year in code in German
   git-ai cleanup      # Clean up merged branches
   git-ai settings     # Configure settings
 
@@ -148,6 +153,11 @@ async function runInteractive(): Promise<string> {
         hint: "Version bump + AI-generated release notes",
       },
       {
+        value: "unwrapped",
+        label: "unwrapped: Your Year in Code",
+        hint: "Spotify Wrapped style summary of your repository",
+      },
+      {
         value: "cleanup",
         label: "cleanup: Delete merged branches",
         hint: "Clean up local branches that are merged in remote",
@@ -189,8 +199,35 @@ async function main(): Promise<void> {
   const releaseFlag = args.includes("--release");
   const noPRsFlag = args.includes("--no-prs");
 
+  // Parse language flag
+  let languageValue: "english" | "german" = "english";
+  const languageFlagIndex = args.findIndex(arg => arg === "--language" || arg.startsWith("--language="));
+  if (languageFlagIndex !== -1) {
+    const languageArg = args[languageFlagIndex];
+    if (languageArg?.startsWith("--language=")) {
+      // Format: --language=german
+      const value = languageArg.split("=")[1]?.toLowerCase();
+      if (value === "german" || value === "english") {
+        languageValue = value;
+      }
+    } else {
+      // Format: --language german
+      const nextArg = args[languageFlagIndex + 1]?.toLowerCase();
+      if (nextArg === "german" || nextArg === "english") {
+        languageValue = nextArg;
+      }
+    }
+  }
+
   // Filter out flags to get the command
-  const commandArgs = args.filter((arg) => !arg.startsWith("-"));
+  // Also filter out language value if it follows --language flag
+  const commandArgs = args.filter((arg, index) => {
+    if (arg.startsWith("-")) return false;
+    // Check if previous arg was --language
+    const prevArg = args[index - 1];
+    if (prevArg === "--language") return false;
+    return true;
+  });
 
   let action: string;
 
@@ -199,7 +236,7 @@ async function main(): Promise<void> {
     action = commandArgs[0] as string;
 
     // Validate command
-    if (!["auto", "branch", "commit", "pr", "release", "cleanup", "prepare", "settings"].includes(action)) {
+    if (!["auto", "branch", "commit", "pr", "release", "unwrapped", "cleanup", "prepare", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -209,8 +246,8 @@ async function main(): Promise<void> {
     action = await runInteractive();
   }
 
-  // Ensure API key is configured (skip for settings, cleanup and prepare commands)
-  if (action !== "settings" && action !== "cleanup" && action !== "prepare") {
+  // Ensure API key is configured (skip for settings, cleanup, prepare and unwrapped commands)
+  if (action !== "settings" && action !== "cleanup" && action !== "prepare" && action !== "unwrapped") {
     await ensureApiKey();
   }
 
@@ -228,6 +265,8 @@ async function main(): Promise<void> {
       await prSuggest({ autoYes: yesFlag });
     } else if (action === "release") {
       await release({ autoYes: yesFlag, includePRs: !noPRsFlag });
+    } else if (action === "unwrapped") {
+      await unwrapped({ autoYes: yesFlag, language: languageValue });
     } else if (action === "cleanup") {
       await cleanup({ autoYes: yesFlag });
     } else if (action === "settings") {
