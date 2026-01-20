@@ -404,7 +404,7 @@ IMPORTANT:
     model: config.model || "gpt-5.2",
     messages: [{ role: "user", content: prompt }],
     temperature: 1,
-    reasoning_effort: "medium", // Better analysis for grouping
+    reasoning_effort: "low", // Better analysis for grouping
     response_format: { type: "json_object" },
   });
 
