@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import {
   getAllChanges,
+  getStagedChanges,
   stageAllChanges,
   stageFiles,
   unstageAll,
@@ -28,8 +29,8 @@ export interface CommitOptions {
   spinner?: ClackSpinner;
 
   /**
-   * Create single commit instead of grouping (opt-out of multi-commit)
-   * @default false
+   * Create single commit instead of grouping
+   * @default true
    */
   singleCommit?: boolean;
 
@@ -59,13 +60,13 @@ export interface CommitResult {
  * @returns The generated commit message(s), or null if cancelled
  */
 export async function generateAndCommit(options: CommitOptions = {}): Promise<string | null> {
-  const { singleCommit = false } = options;
+  const { singleCommit = true } = options;
 
   if (singleCommit) {
-    // Legacy single-commit mode
+    // Single-commit mode (default)
     return generateAndCommitSingle(options);
   } else {
-    // New multi-commit mode (default)
+    // Multi-commit mode (grouped commits)
     const result = await generateAndCommitMultiple(options);
     if (!result) return null;
 
@@ -266,21 +267,30 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
 }
 
 /**
- * Single-commit workflow (legacy mode)
+ * Single-commit workflow with feedback loop
  */
 async function generateAndCommitSingle(options: CommitOptions = {}): Promise<string | null> {
   const { confirmBeforeCommit = true, spinner: externalSpinner, autoYes = false } = options;
   const spinner = new Spinner(externalSpinner);
 
   try {
-    // Stage all changes (including untracked files)
-    spinner.start("Staging all changes...");
-    await stageAllChanges();
-    spinner.stop("All changes staged");
+    // Check if there are already staged changes
+    spinner.start("Checking for staged changes...");
+    const stagedChanges = await getStagedChanges();
 
-    // Get all changes to analyze
+    if (stagedChanges.length === 0) {
+      // No staged changes - stage all changes
+      spinner.message("No staged changes found, staging all changes...");
+      await stageAllChanges();
+      spinner.stop("All changes staged");
+    } else {
+      // Use only staged changes
+      spinner.stop(`Found ${stagedChanges.length} staged file(s)`);
+    }
+
+    // Get staged changes to analyze
     spinner.start("Analyzing changes...");
-    const changes = await getAllChanges();
+    const changes = await getStagedChanges();
 
     if (changes.length === 0) {
       spinner.stop("No changes to commit");
@@ -307,34 +317,81 @@ async function generateAndCommitSingle(options: CommitOptions = {}): Promise<str
     // Get current branch name for context
     const currentBranch = await getCurrentBranch();
 
-    // Generate commit message
-    spinner.start("Generating commit message...");
-    const commitMessage = await generateCommitMessage(
-      includedChanges.map((c) => ({
-        path: c.path,
-        status: c.status,
-        diff: c.diff,
-      })),
-      currentBranch
-    );
-    spinner.stop("Message generated");
+    // Feedback loop for commit message generation
+    let commitMessage = "";
+    let userFeedback: string | undefined;
+    let continueLoop = true;
 
-    // Display the generated message
-    p.note(commitMessage, "Suggested commit message");
+    while (continueLoop) {
+      // Generate commit message
+      spinner.start(userFeedback ? "Regenerating commit message with your feedback..." : "Generating commit message...");
+      commitMessage = await generateCommitMessage(
+        includedChanges.map((c) => ({
+          path: c.path,
+          status: c.status,
+          diff: c.diff,
+        })),
+        currentBranch,
+        userFeedback
+      );
+      spinner.stop("Message generated");
 
-    // Ask for confirmation if required
-    if (!autoYes && confirmBeforeCommit) {
-      const shouldCommit = await p.confirm({
-        message: "Do you want to commit with this message?",
-        initialValue: true,
-      });
+      // Display the generated message
+      p.note(commitMessage, "Suggested commit message");
 
-      if (p.isCancel(shouldCommit) || !shouldCommit) {
+      // In autoYes mode, accept immediately
+      let action: string;
+      if (autoYes) {
+        p.log.info("Auto-accepting: Creating commit");
+        action = "commit";
+        continueLoop = false;
+      } else if (!confirmBeforeCommit) {
+        // If no confirmation required, commit immediately
+        action = "commit";
+        continueLoop = false;
+      } else {
+        // Ask what user wants to do
+        const selectedAction = await p.select({
+          message: "What would you like to do?",
+          options: [
+            { value: "commit", label: "Commit with this message" },
+            { value: "regenerate", label: "Regenerate with feedback" },
+            { value: "cancel", label: "Cancel" },
+          ],
+        });
+
+        if (p.isCancel(selectedAction)) {
+          p.cancel("Commit cancelled");
+          return null;
+        }
+
+        action = selectedAction as string;
+      }
+
+      if (action === "regenerate") {
+        // Ask for feedback
+        const feedback = await p.text({
+          message: "What would you like to change? (e.g., 'Use shorter description', 'Should be a fix, not feat')",
+          placeholder: "Provide feedback here...",
+          validate: (value) => {
+            if (!value || value.trim().length === 0) return "Feedback is required";
+          },
+        });
+
+        if (p.isCancel(feedback)) {
+          p.cancel("Commit cancelled");
+          return null;
+        }
+
+        userFeedback = feedback as string;
+        // Continue the loop
+      } else if (action === "commit") {
+        continueLoop = false;
+      } else {
+        // cancel
         p.cancel("Commit cancelled");
         return null;
       }
-    } else if (autoYes) {
-      p.log.info("Auto-accepting: Creating commit");
     }
 
     // Execute the commit

@@ -9,7 +9,7 @@ export interface CommitCommandOptions {
 }
 
 export async function commit(options: CommitCommandOptions = {}): Promise<void> {
-  const { autoYes = false, singleCommit = false } = options;
+  const { autoYes = false, singleCommit = true } = options;
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -18,8 +18,8 @@ export async function commit(options: CommitCommandOptions = {}): Promise<void> 
   }
 
   // Show mode info
-  if (singleCommit) {
-    p.log.info("Single commit mode enabled");
+  if (!singleCommit) {
+    p.log.info("Grouped commit mode enabled");
   }
 
   const spinner = new Spinner();
