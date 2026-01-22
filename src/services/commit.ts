@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import {
   getAllChanges,
+  getStagedChanges,
   stageAllChanges,
   stageFiles,
   unstageAll,
@@ -28,8 +29,8 @@ export interface CommitOptions {
   spinner?: ClackSpinner;
 
   /**
-   * Create single commit instead of grouping (opt-out of multi-commit)
-   * @default false
+   * Create single commit instead of grouping
+   * @default true
    */
   singleCommit?: boolean;
 
@@ -59,13 +60,13 @@ export interface CommitResult {
  * @returns The generated commit message(s), or null if cancelled
  */
 export async function generateAndCommit(options: CommitOptions = {}): Promise<string | null> {
-  const { singleCommit = false } = options;
+  const { singleCommit = true } = options;
 
   if (singleCommit) {
-    // Legacy single-commit mode
+    // Single-commit mode (default)
     return generateAndCommitSingle(options);
   } else {
-    // New multi-commit mode (default)
+    // Multi-commit mode (grouped commits)
     const result = await generateAndCommitMultiple(options);
     if (!result) return null;
 
@@ -273,14 +274,23 @@ async function generateAndCommitSingle(options: CommitOptions = {}): Promise<str
   const spinner = new Spinner(externalSpinner);
 
   try {
-    // Stage all changes (including untracked files)
-    spinner.start("Staging all changes...");
-    await stageAllChanges();
-    spinner.stop("All changes staged");
+    // Check if there are already staged changes
+    spinner.start("Checking for staged changes...");
+    const stagedChanges = await getStagedChanges();
 
-    // Get all changes to analyze
+    if (stagedChanges.length === 0) {
+      // No staged changes - stage all changes
+      spinner.message("No staged changes found, staging all changes...");
+      await stageAllChanges();
+      spinner.stop("All changes staged");
+    } else {
+      // Use only staged changes
+      spinner.stop(`Found ${stagedChanges.length} staged file(s)`);
+    }
+
+    // Get staged changes to analyze
     spinner.start("Analyzing changes...");
-    const changes = await getAllChanges();
+    const changes = await getStagedChanges();
 
     if (changes.length === 0) {
       spinner.stop("No changes to commit");

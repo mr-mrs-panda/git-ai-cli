@@ -4,6 +4,7 @@ import * as p from "@clack/prompts";
 import { auto } from "./commands/auto.ts";
 import { createBranch } from "./commands/create-branch.ts";
 import { commit } from "./commands/commit.ts";
+import { stage } from "./commands/stage.ts";
 import { prSuggest } from "./commands/pr-suggest.ts";
 import { settings } from "./commands/settings.ts";
 import { cleanup } from "./commands/cleanup.ts";
@@ -24,6 +25,7 @@ Commands:
   auto      Smart workflow: branch → commit → push → PR
   prepare   Prepare for a new feature: handle changes, checkout main, and pull
   branch    Analyze changes and suggest a branch name
+  stage     Stage files interactively with a TUI
   commit    Generate AI-powered commit message from staged changes
   pr        Generate PR title and description from branch commits
   release   Create a GitHub release with AI-generated release notes
@@ -36,7 +38,7 @@ Options:
   -h, --help            Show this help message
   -v, --version         Show version
   -y, --yes             Auto-accept all prompts (blind mode)
-  --single              Create single commit instead of grouping (commit command only)
+  --grouped             Create multiple logical commits (commit command only)
   --yolo                YOLO mode: auto-merge PR and delete branch
   --release             Release mode: auto workflow + merge + release (implies --yolo)
   --no-prs              Disable fetching PR info for release notes (PRs are included by default)
@@ -50,8 +52,9 @@ Examples:
   git-ai auto --release  # Full release workflow: commit → PR → merge → release
   git-ai prepare      # Prepare for a new feature
   git-ai branch       # Create branch from changes
-  git-ai commit       # Generate multiple logical commits (default)
-  git-ai commit --single  # Create one commit with all changes (legacy mode)
+  git-ai stage        # Stage files interactively
+  git-ai commit       # Generate a single commit (default)
+  git-ai commit --grouped  # Create multiple logical commits
   git-ai commit -y    # Auto-accept all confirmations
   git-ai pr           # Generate PR suggestion
   git-ai release      # Create a release (includes PRs if GitHub token available)
@@ -141,6 +144,11 @@ async function runInteractive(): Promise<string> {
         hint: "Analyze changes and suggest a branch name",
       },
       {
+        value: "stage",
+        label: "stage: Stage files interactively",
+        hint: "Select which files to stage with a TUI",
+      },
+      {
         value: "commit",
         label: "commit: Generate commit message",
         hint: "Analyze staged changes and suggest a commit message",
@@ -201,7 +209,7 @@ async function main(): Promise<void> {
   const yoloFlag = args.includes("--yolo");
   const releaseFlag = args.includes("--release");
   const noPRsFlag = args.includes("--no-prs");
-  const singleFlag = args.includes("--single");
+  const groupedFlag = args.includes("--grouped");
 
   // Parse language flag
   let languageValue: "english" | "german" = "english";
@@ -240,7 +248,7 @@ async function main(): Promise<void> {
     action = commandArgs[0] as string;
 
     // Validate command
-    if (!["auto", "branch", "commit", "pr", "release", "unwrapped", "cleanup", "prepare", "settings"].includes(action)) {
+    if (!["auto", "branch", "stage", "commit", "pr", "release", "unwrapped", "cleanup", "prepare", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -250,8 +258,8 @@ async function main(): Promise<void> {
     action = await runInteractive();
   }
 
-  // Ensure API key is configured (skip for settings, cleanup, prepare and unwrapped commands)
-  if (action !== "settings" && action !== "cleanup" && action !== "prepare" && action !== "unwrapped") {
+  // Ensure API key is configured (skip for settings, cleanup, prepare, stage and unwrapped commands)
+  if (action !== "settings" && action !== "cleanup" && action !== "prepare" && action !== "stage" && action !== "unwrapped") {
     await ensureApiKey();
   }
 
@@ -263,8 +271,10 @@ async function main(): Promise<void> {
       await prepare({ autoYes: yesFlag });
     } else if (action === "branch") {
       await createBranch({ autoYes: yesFlag });
+    } else if (action === "stage") {
+      await stage({ autoYes: yesFlag });
     } else if (action === "commit") {
-      await commit({ autoYes: yesFlag, singleCommit: singleFlag });
+      await commit({ autoYes: yesFlag, singleCommit: !groupedFlag });
     } else if (action === "pr") {
       await prSuggest({ autoYes: yesFlag });
     } else if (action === "release") {

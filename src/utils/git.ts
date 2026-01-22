@@ -117,6 +117,66 @@ export async function getStagedChanges(): Promise<GitFileChange[]> {
 }
 
 /**
+ * Get only staged file paths without full diffs
+ * Lightweight version for UI purposes
+ */
+export async function getStagedFilePaths(): Promise<string[]> {
+  const proc = Bun.spawn(["git", "diff", "--cached", "--name-only"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+  const output = await new Response(proc.stdout).text();
+
+  if (!output.trim()) {
+    return [];
+  }
+
+  return output.trim().split("\n").filter(Boolean);
+}
+
+/**
+ * Get only unstaged file changes (modified/deleted but not staged, and untracked files)
+ * Does not include diffs - just paths and status
+ */
+export async function getUnstagedChanges(): Promise<Array<{ path: string; status: string }>> {
+  const files: Array<{ path: string; status: string }> = [];
+
+  // Use git status --porcelain to get file status
+  const proc = Bun.spawn(["git", "status", "--porcelain"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+  const status = await new Response(proc.stdout).text();
+
+  if (!status) {
+    return [];
+  }
+
+  const lines = status.split("\n").filter(Boolean);
+
+  for (const line of lines) {
+    if (line.length < 2) continue;
+
+    const indexStatus = line[0];   // X in XY format
+    const workTreeStatus = line[1]; // Y in XY format
+    const path = line.slice(3).trim(); // Path starts at position 3
+
+    // Include files that have unstaged changes or are untracked
+    if (line.startsWith("??")) {
+      // Untracked file
+      files.push({ path, status: "??" });
+    } else if (workTreeStatus !== " " && workTreeStatus !== undefined) {
+      // Unstaged changes in working tree
+      files.push({ path, status: indexStatus + workTreeStatus });
+    }
+  }
+
+  return files;
+}
+
+/**
  * Get all file changes (staged and unstaged) with their diffs
  * Combines both staged, unstaged and untracked changes into one list
  * Skips files that are too large
@@ -545,6 +605,26 @@ export async function unstageAll(): Promise<void> {
   if (proc.exitCode !== 0) {
     const error = await new Response(proc.stderr).text();
     throw new Error(error || "Failed to unstage files");
+  }
+}
+
+/**
+ * Unstage specific files
+ */
+export async function unstageFiles(filePaths: string[]): Promise<void> {
+  if (filePaths.length === 0) {
+    return;
+  }
+
+  const proc = Bun.spawn(["git", "reset", "HEAD", "--", ...filePaths], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to unstage files: ${filePaths.join(", ")}`);
   }
 }
 
