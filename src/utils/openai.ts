@@ -404,7 +404,7 @@ IMPORTANT:
     model: config.model || "gpt-5.2",
     messages: [{ role: "user", content: prompt }],
     temperature: 1,
-    reasoning_effort: "medium", // Better analysis for grouping
+    reasoning_effort: config.reasoningEffort || "low", // Better analysis for grouping
     response_format: { type: "json_object" },
   });
 
@@ -477,7 +477,7 @@ RESPOND WITH VALID JSON ONLY (same format as before).`;
     model: config.model || "gpt-5.2",
     messages: [{ role: "user", content: prompt }],
     temperature: 1,
-    reasoning_effort: "medium",
+    reasoning_effort: config.reasoningEffort || "low",
     response_format: { type: "json_object" },
   });
 
