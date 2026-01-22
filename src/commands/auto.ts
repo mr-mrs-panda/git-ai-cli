@@ -1,6 +1,5 @@
 import * as p from "@clack/prompts";
 import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges, switchToBranch, pullBranch, fetchOrigin } from "../utils/git.ts";
-import { analyzeBranchName } from "../services/branch.ts";
 import { generateAndCommit } from "../services/commit.ts";
 import { getBranchInfo, pushToOrigin, isBranchPushed, isGitHubRepository, prExistsForBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
@@ -427,56 +426,17 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   if (currentBranch === baseBranch) {
     p.log.step("Step 1: Creating new branch (currently on base branch)");
 
-    spinner.start("Analyzing changes for branch name...");
-    const branchSuggestion = await analyzeBranchName();
+    // Use the createBranch command with feedback loop
+    const { createBranch } = await import("./create-branch.ts");
 
-    if (!branchSuggestion) {
-      spinner.stop("Failed to analyze changes");
-      throw new Error("Could not analyze changes for branch name");
+    try {
+      await createBranch({ autoYes: effectiveAutoYes });
+      // Get the new branch name after creation
+      workingBranch = await getCurrentBranch();
+    } catch (error) {
+      p.cancel("Branch creation cancelled");
+      return;
     }
-
-    spinner.stop("Branch name generated");
-
-    p.note(
-      `Type: ${branchSuggestion.type}\n` +
-      `Name: ${branchSuggestion.name}\n` +
-      `Description: ${branchSuggestion.description}`,
-      "Suggested Branch"
-    );
-
-    let shouldCreateBranch = true;
-
-    if (!effectiveAutoYes) {
-      const response = await p.confirm({
-        message: `Create branch '${branchSuggestion.name}'?`,
-        initialValue: true,
-      });
-
-      if (p.isCancel(response) || !response) {
-        p.cancel("Auto mode cancelled");
-        return;
-      }
-
-      shouldCreateBranch = response;
-    } else {
-      p.log.info(`Auto-accepting: Creating branch '${branchSuggestion.name}'`);
-    }
-
-    spinner.start(`Creating branch '${branchSuggestion.name}'...`);
-    const proc = Bun.spawn(["git", "checkout", "-b", branchSuggestion.name], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    await proc.exited;
-
-    if (proc.exitCode !== 0) {
-      const error = await new Response(proc.stderr).text();
-      spinner.stop("Failed to create branch");
-      throw new Error(error || "Failed to create branch");
-    }
-
-    spinner.stop(`Created and switched to '${branchSuggestion.name}'`);
-    workingBranch = branchSuggestion.name;
   } else {
     p.log.info(`Already on feature branch '${currentBranch}', skipping branch creation`);
   }
