@@ -61,18 +61,18 @@ export interface AICelebrationContent {
     sizeTitle: string;
     sizeEmoji: string;
     sizeDescription: string;
-    
+
     // Celebration message
     celebrationMessage: string;
-    
+
     // Colors (hex)
     primaryColor: string;
     secondaryColor: string;
     accentColor: string;
-    
+
     // AI Summary (HTML)
     summary: string;
-    
+
     // Fun tagline for the PR
     tagline: string;
 }
@@ -339,13 +339,13 @@ export async function collectPRCelebrateStats(
     const octokit = new Octokit({ auth: githubToken });
 
     onProgress("📝 Fetching commits...");
-    
+
     // Fetch ALL commits with pagination
     type CommitInfo = { sha: string; commit: { message: string; author: { name?: string; date?: string } | null }; author: { login: string } | null };
     const allCommits: CommitInfo[] = [];
     let commitPage = 1;
     let hasMoreCommits = true;
-    
+
     while (hasMoreCommits) {
         const { data: pageCommits } = await octokit.rest.pulls.listCommits({
             owner,
@@ -354,7 +354,7 @@ export async function collectPRCelebrateStats(
             per_page: 100,
             page: commitPage,
         });
-        
+
         // Map to our expected type
         const mappedCommits: CommitInfo[] = pageCommits.map((c) => ({
             sha: c.sha,
@@ -364,9 +364,9 @@ export async function collectPRCelebrateStats(
             },
             author: c.author && "login" in c.author && c.author.login ? { login: c.author.login } : null,
         }));
-        
+
         allCommits.push(...mappedCommits);
-        
+
         if (pageCommits.length < 100) {
             hasMoreCommits = false;
         } else {
@@ -374,7 +374,7 @@ export async function collectPRCelebrateStats(
             onProgress(`📝 Fetching commits... (${allCommits.length} so far)`);
         }
     }
-    
+
     onProgress(`📝 Found ${allCommits.length} commits`);
 
 
@@ -401,12 +401,12 @@ export async function collectPRCelebrateStats(
         }));
 
     onProgress("📁 Fetching file changes...");
-    
+
     // Fetch ALL files with pagination
     const allFiles: Array<{ filename: string; additions: number; deletions: number; status: string }> = [];
     let filePage = 1;
     let hasMoreFiles = true;
-    
+
     while (hasMoreFiles) {
         const { data: pageFiles } = await octokit.rest.pulls.listFiles({
             owner,
@@ -415,9 +415,9 @@ export async function collectPRCelebrateStats(
             per_page: 100,
             page: filePage,
         });
-        
+
         allFiles.push(...pageFiles);
-        
+
         if (pageFiles.length < 100) {
             hasMoreFiles = false;
         } else {
@@ -425,7 +425,7 @@ export async function collectPRCelebrateStats(
             onProgress(`📁 Fetching files... (${allFiles.length} so far)`);
         }
     }
-    
+
     onProgress(`📁 Found ${allFiles.length} changed files`);
 
     // File stats
@@ -558,7 +558,7 @@ export async function generatePRCelebrateHTML(
     const primaryColor = aiContent.primaryColor || "#a371f7";
     const secondaryColor = aiContent.secondaryColor || "#f778ba";
     const accentColor = aiContent.accentColor || "#58a6ff";
-    
+
     const stateColor = stats.prState === "merged" ? primaryColor : stats.prState === "open" ? "#3fb950" : "#f85149";
     const stateText = stats.prState === "merged" ? t("merged", language) : stats.prState === "open" ? t("open", language) : t("closed", language);
 
@@ -1408,21 +1408,21 @@ function getSizeInfo(
 
 function getDefaultCelebrationContent(stats: PRCelebrateStats, language: Language): AICelebrationContent {
     const sizeInfo = getSizeInfo(stats.sizeCategory, language);
-    
+
     const celebrationMessages: Record<string, { en: string; de: string }> = {
         merged: { en: "🎉 This PR has been merged! Time to celebrate!", de: "🎉 Dieser PR wurde gemerged! Zeit zum Feiern!" },
         large: { en: "🔥 This is a significant contribution!", de: "🔥 Das ist ein bedeutender Beitrag!" },
         team: { en: "👥 Great teamwork with multiple contributors!", de: "👥 Tolle Teamarbeit mit mehreren Mitwirkenden!" },
         default: { en: "✨ Another great PR!", de: "✨ Noch ein toller PR!" },
     };
-    
+
     let celebrationKey = "default";
     if (stats.prState === "merged") celebrationKey = "merged";
     else if (stats.linesAdded + stats.linesDeleted > 500) celebrationKey = "large";
     else if (stats.authors.length > 1) celebrationKey = "team";
-    
+
     const msg = celebrationMessages[celebrationKey] ?? celebrationMessages.default!;
-    
+
     return {
         sizeTitle: sizeInfo.title,
         sizeEmoji: sizeInfo.emoji,
@@ -1440,7 +1440,7 @@ function getDefaultCelebrationContent(stats: PRCelebrateStats, language: Languag
 
 async function generateAICelebrationContent(stats: PRCelebrateStats, language: Language): Promise<AICelebrationContent> {
     const defaultContent = getDefaultCelebrationContent(stats, language);
-    
+
     try {
         const config = await loadConfig();
 
@@ -1451,7 +1451,7 @@ async function generateAICelebrationContent(stats: PRCelebrateStats, language: L
         const client = new OpenAI({ apiKey: config.openaiApiKey });
 
         // Build commit list (sample for large PRs)
-        const commitSample = stats.commits.length > 50 
+        const commitSample = stats.commits.length > 50
             ? [...stats.commits.slice(0, 25), ...stats.commits.slice(-25)]
             : stats.commits;
         const commitList = commitSample
@@ -1571,7 +1571,7 @@ OUTPUT ONLY JSON, nothing else!`;
         if (content) {
             try {
                 const parsed = JSON.parse(content) as Partial<AICelebrationContent>;
-                
+
                 // Validate and merge with defaults
                 return {
                     sizeTitle: parsed.sizeTitle || defaultContent.sizeTitle,
