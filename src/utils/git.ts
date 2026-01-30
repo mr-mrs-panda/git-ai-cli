@@ -94,14 +94,31 @@ export async function getStagedChanges(): Promise<GitFileChange[]> {
     }
 
     // Get diff for this specific file
+    // Use -- separator to handle deleted files where the path doesn't exist in working directory
     try {
-      const diff = await $`git diff --cached ${path}`.text();
-      files.push({
-        path,
-        status,
-        diff: diff.trim(),
-        skipped: false,
+      const proc = Bun.spawn(["git", "diff", "--cached", "--", path], {
+        stdout: "pipe",
+        stderr: "pipe",
       });
+      await proc.exited;
+
+      if (proc.exitCode === 0) {
+        const diff = await new Response(proc.stdout).text();
+        files.push({
+          path,
+          status,
+          diff: diff.trim(),
+          skipped: false,
+        });
+      } else {
+        files.push({
+          path,
+          status,
+          diff: "",
+          skipped: true,
+          skipReason: "Could not read diff",
+        });
+      }
     } catch {
       files.push({
         path,
