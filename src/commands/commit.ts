@@ -38,7 +38,8 @@ export async function commit(options: CommitCommandOptions = {}): Promise<void> 
   }
 
   // Ask if user wants to push
-  let shouldPush = autoYes;
+  // In autoYes mode, commit command should only create commits and never auto-push.
+  let shouldPush = false;
 
   if (!autoYes) {
     const response = await p.confirm({
@@ -53,7 +54,7 @@ export async function commit(options: CommitCommandOptions = {}): Promise<void> 
 
     shouldPush = response;
   } else {
-    p.log.info("Auto-accepting: Pushing to origin");
+    p.log.info("Auto-accepting: Skipping push (commit-only mode)");
   }
 
   if (shouldPush) {

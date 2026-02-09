@@ -288,8 +288,9 @@ export async function createGitHubPullRequest(params: {
   repo: string;
   githubToken: string;
   autoYes?: boolean;
+  draft?: boolean;
 }): Promise<{ number: number; url: string } | null> {
-  const { title, description, currentBranch, baseBranch, owner, repo, githubToken, autoYes = false } = params;
+  const { title, description, currentBranch, baseBranch, owner, repo, githubToken, autoYes = false, draft = true } = params;
 
   const spinner = new Spinner();
 
@@ -321,6 +322,7 @@ export async function createGitHubPullRequest(params: {
       body: description,
       head: currentBranch,
       base: baseBranch,
+      draft,
     });
 
     spinner.stop("Pull Request created successfully!");
