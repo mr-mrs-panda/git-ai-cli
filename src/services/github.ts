@@ -24,6 +24,29 @@ export interface ExistingPR {
   url: string;
 }
 
+async function openInBrowser(url: string): Promise<void> {
+  const platform = process.platform;
+
+  let command: string[];
+  if (platform === "darwin") {
+    command = ["open", url];
+  } else if (platform === "win32") {
+    command = ["cmd", "/c", "start", "", url];
+  } else {
+    command = ["xdg-open", url];
+  }
+
+  try {
+    const proc = Bun.spawn(command, {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+  } catch {
+    p.log.info(`Could not open browser. Open manually: ${url}`);
+  }
+}
+
 /**
  * Ensure GitHub token is available, prompt user if not
  *
@@ -333,6 +356,8 @@ export async function createGitHubPullRequest(params: {
       `Number: #${data.number}`,
       "Pull Request Details"
     );
+
+    await openInBrowser(data.html_url);
 
     return { number: data.number, url: data.html_url };
   } catch (error: any) {
