@@ -43,23 +43,25 @@ async function checkoutAndPullBase(
 ): Promise<void> {
   p.log.step("Final: Preparing for next feature");
 
-  let shouldCheckoutAndPull = autoYes;
-
-  if (!autoYes) {
-    const response = await p.confirm({
-      message: `Checkout to ${baseBranch} and pull latest changes?`,
-      initialValue: true,
-    });
-
-    if (p.isCancel(response) || !response) {
-      p.note("Staying on current branch.", "Done");
-      return;
-    }
-
-    shouldCheckoutAndPull = response;
-  } else {
-    p.log.info(`Auto-accepting: Checking out to ${baseBranch} and pulling latest changes`);
+  // In auto-yes mode, keep the user on the current branch.
+  if (autoYes) {
+    p.log.info("Auto-accepting: Staying on current branch (skipping checkout and pull)");
+    return;
   }
+
+  let shouldCheckoutAndPull = false;
+
+  const response = await p.confirm({
+    message: `Checkout to ${baseBranch} and pull latest changes?`,
+    initialValue: true,
+  });
+
+  if (p.isCancel(response) || !response) {
+    p.note("Staying on current branch.", "Done");
+    return;
+  }
+
+  shouldCheckoutAndPull = response;
 
   if (shouldCheckoutAndPull) {
     // Checkout to base branch
