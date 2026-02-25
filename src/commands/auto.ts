@@ -105,6 +105,36 @@ async function mergePRAndDeleteBranch(
 
   const octokit = new Octokit({ auth: githubToken });
 
+  // Check if the PR is a draft and convert it to ready-for-review first
+  spinner.start(`Checking PR #${prNumber} status...`);
+  try {
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
+
+    if (pr.draft) {
+      spinner.stop(`PR #${prNumber} is a draft – converting to ready for review`);
+      // GitHub REST API does not support converting draft→ready directly; use GraphQL
+      await octokit.graphql(
+        `mutation($pullRequestId: ID!) {
+          markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+            pullRequest { isDraft }
+          }
+        }`,
+        { pullRequestId: pr.node_id }
+      );
+      p.log.success(`PR #${prNumber} is now ready for review`);
+    } else {
+      spinner.stop(`PR #${prNumber} is ready for review`);
+    }
+  } catch (error: any) {
+    spinner.stop("Failed to check/update PR draft status");
+    const message = error.response?.data?.message || error.message || String(error);
+    throw new Error(`Could not update PR draft status: ${message}`);
+  }
+
   // Merge the PR
   spinner.start(`Merging PR #${prNumber}...`);
   try {
