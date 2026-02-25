@@ -583,21 +583,10 @@ export async function hasUnstagedChanges(): Promise<boolean> {
 }
 
 /**
- * Stage all changes
+ * Stage all changes (including deletions across the entire repository)
  */
 export async function stageAllChanges(): Promise<void> {
-  await $`git add .`;
-}
-
-/**
- * Stage specific files
- */
-export async function stageFiles(filePaths: string[]): Promise<void> {
-  if (filePaths.length === 0) {
-    return;
-  }
-
-  const proc = Bun.spawn(["git", "add", ...filePaths], {
+  const proc = Bun.spawn(["git", "add", "-A"], {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -605,7 +594,57 @@ export async function stageFiles(filePaths: string[]): Promise<void> {
 
   if (proc.exitCode !== 0) {
     const error = await new Response(proc.stderr).text();
-    throw new Error(error || `Failed to stage files: ${filePaths.join(", ")}`);
+    throw new Error(error || "Failed to stage all changes");
+  }
+}
+
+/**
+ * Stage specific files
+ * Handles new/modified files (git add) and deleted files (git rm --cached) separately,
+ * because `git add` cannot stage a deletion for a file that no longer exists on disk
+ * (e.g. after `git reset HEAD` unstaged the deletion back into the index).
+ */
+export async function stageFiles(filePaths: string[]): Promise<void> {
+  if (filePaths.length === 0) {
+    return;
+  }
+
+  const toAdd: string[] = [];
+  const toRemove: string[] = [];
+
+  for (const filePath of filePaths) {
+    if (await Bun.file(filePath).exists()) {
+      toAdd.push(filePath);
+    } else {
+      toRemove.push(filePath);
+    }
+  }
+
+  if (toAdd.length > 0) {
+    const proc = Bun.spawn(["git", "add", "--", ...toAdd], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      const error = await new Response(proc.stderr).text();
+      throw new Error(error || `Failed to stage files: ${toAdd.join(", ")}`);
+    }
+  }
+
+  if (toRemove.length > 0) {
+    // Files missing from the working tree must be staged as deletions via git rm --cached
+    const proc = Bun.spawn(["git", "rm", "--cached", "--", ...toRemove], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+      const error = await new Response(proc.stderr).text();
+      throw new Error(error || `Failed to stage deleted files: ${toRemove.join(", ")}`);
+    }
   }
 }
 
