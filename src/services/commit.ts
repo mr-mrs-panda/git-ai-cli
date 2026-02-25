@@ -159,6 +159,22 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
     // Sort groups by dependencies
     const sortedGroups = sortGroupsByDependencies(groupingResult.groups);
 
+    // Ensure every changed file is covered by exactly one group.
+    // The AI might silently omit files (especially deletions); collect them and
+    // append them to the last group so nothing is left behind.
+    const allGroupFiles = new Set(sortedGroups.flatMap((g) => g.files));
+    const uncoveredFiles = changes.map((c) => c.path).filter((p) => !allGroupFiles.has(p));
+    if (uncoveredFiles.length > 0) {
+      p.log.warn(
+        `${uncoveredFiles.length} file(s) not assigned to any commit group – adding to last group:\n` +
+          uncoveredFiles.map((f) => `  • ${f}`).join("\n")
+      );
+      const lastGroup = sortedGroups[sortedGroups.length - 1];
+      if (lastGroup) {
+        lastGroup.files.push(...uncoveredFiles);
+      }
+    }
+
     // Display all groups
     displayGroups(sortedGroups, skippedChanges);
 
@@ -255,6 +271,41 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
     // Display summary
     if (result.commits.length > 0) {
       p.log.success(`\nSuccessfully created ${result.commits.length} commit(s)!`);
+    }
+
+    // Safety-net: stage and commit any changes that slipped through all groups.
+    // This can happen when git rm --cached fails silently or the grouping missed a file.
+    if (result.success) {
+      spinner.start("Checking for uncommitted changes...");
+      await stageAllChanges();
+      const leftover = await getStagedChanges();
+      if (leftover.length > 0) {
+        spinner.stop(`Found ${leftover.length} uncommitted file(s) – creating cleanup commit`);
+        p.log.warn(
+          `The following file(s) were not committed in any group and will be bundled into a cleanup commit:\n` +
+            leftover.map((c) => `  • ${c.path} (${c.status})`).join("\n")
+        );
+        const tmpFile = `/tmp/git-ai-cleanup-${Date.now()}.txt`;
+        try {
+          await Bun.write(tmpFile, "chore: stage remaining uncommitted changes from grouped commit");
+          const proc = Bun.spawn(["git", "commit", "-F", tmpFile], {
+            stdout: "pipe",
+            stderr: "pipe",
+          });
+          await proc.exited;
+          if (proc.exitCode !== 0) {
+            const error = await new Response(proc.stderr).text();
+            p.log.error(`Cleanup commit failed: ${error}`);
+          } else {
+            const hash = await getCurrentCommitHash();
+            p.log.success(`${hash.slice(0, 7)} - chore: stage remaining uncommitted changes from grouped commit`);
+          }
+        } finally {
+          try { await Bun.spawn(["rm", "-f", tmpFile]).exited; } catch { /* ignore */ }
+        }
+      } else {
+        spinner.stop("All changes committed");
+      }
     }
 
     return result;
