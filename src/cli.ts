@@ -12,6 +12,7 @@ import { prepare } from "./commands/prepare.ts";
 import { release } from "./commands/release.ts";
 import { unwrapped } from "./commands/unwrapped.ts";
 import { prCelebrate } from "./commands/pr-celebrate.ts";
+import { createWorktreeCommand } from "./commands/worktree.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
 import { Spinner } from "./utils/ui.ts";
 
@@ -32,7 +33,8 @@ Commands:
   release   Create a GitHub release with AI-generated release notes
   unwrapped Your year in code - Spotify Wrapped style summary
   celebrate Celebrate your current PR with fancy stats and AI
-  cleanup   Delete local branches that are merged in remote
+  cleanup   Delete local merged branches and their merged worktrees
+  worktree  Create a new worktree from main with matching branch name
   settings  Configure AI model, reasoning effort, and other settings
   help      Show this help message
 
@@ -65,7 +67,8 @@ Examples:
   git-ai unwrapped --language german  # Year in code in German
   git-ai celebrate    # Celebrate your current PR with stats and AI summary
   git-ai celebrate --language german  # PR celebration in German
-  git-ai cleanup      # Clean up merged branches
+  git-ai cleanup      # Local cleanup for merged branches/worktrees
+  git-ai worktree social-media-master  # Create ../<project>-social-media-master
   git-ai settings     # Configure settings
 
 Documentation:
@@ -179,8 +182,13 @@ async function runInteractive(): Promise<string> {
       },
       {
         value: "cleanup",
-        label: "cleanup: Delete merged branches",
-        hint: "Clean up local branches that are merged in remote",
+        label: "cleanup: Local branch/worktree cleanup",
+        hint: "Delete local merged branches and merged worktrees",
+      },
+      {
+        value: "worktree",
+        label: "worktree: Create isolated worktree",
+        hint: "Create ../<project>-<name> from main with new branch",
       },
       {
         value: "settings",
@@ -257,7 +265,7 @@ async function main(): Promise<void> {
     action = commandArgs[0] as string;
 
     // Validate command
-    if (!["auto", "branch", "stage", "commit", "pr", "release", "unwrapped", "celebrate", "cleanup", "prepare", "settings"].includes(action)) {
+    if (!["auto", "branch", "stage", "commit", "pr", "release", "unwrapped", "celebrate", "cleanup", "worktree", "prepare", "settings"].includes(action)) {
       console.error(`Error: Unknown command '${action}'`);
       console.error("Run 'git-ai --help' for usage information");
       process.exit(1);
@@ -267,8 +275,8 @@ async function main(): Promise<void> {
     action = await runInteractive();
   }
 
-  // Ensure API key is configured (skip for settings, cleanup, prepare, stage, unwrapped and celebrate commands)
-  if (action !== "settings" && action !== "cleanup" && action !== "prepare" && action !== "stage" && action !== "unwrapped" && action !== "celebrate") {
+  // Ensure API key is configured (skip for settings, cleanup, worktree, prepare, stage, unwrapped and celebrate commands)
+  if (action !== "settings" && action !== "cleanup" && action !== "worktree" && action !== "prepare" && action !== "stage" && action !== "unwrapped" && action !== "celebrate") {
     await ensureApiKey();
   }
 
@@ -294,6 +302,8 @@ async function main(): Promise<void> {
       await prCelebrate({ autoYes: yesFlag, language: languageValue });
     } else if (action === "cleanup") {
       await cleanup({ autoYes: yesFlag });
+    } else if (action === "worktree") {
+      await createWorktreeCommand({ autoYes: yesFlag, name: commandArgs[1] });
     } else if (action === "settings") {
       await settings();
     }

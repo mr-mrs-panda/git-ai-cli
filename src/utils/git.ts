@@ -1,4 +1,6 @@
 import { $ } from "bun";
+import { rm } from "node:fs/promises";
+import { resolve } from "node:path";
 
 const MAX_FILE_SIZE_BYTES = 100_000; // 100KB - skip files larger than this
 
@@ -23,12 +25,37 @@ export interface GitCommit {
   date: string;
 }
 
+export interface GitWorktree {
+  path: string;
+  branch: string | null;
+  isMain: boolean;
+}
+
 /**
  * Get the current git branch name
  */
 export async function getCurrentBranch(): Promise<string> {
   const result = await $`git branch --show-current`.text();
   return result.trim();
+}
+
+/**
+ * Get the absolute repository root path.
+ */
+export async function getRepositoryRoot(): Promise<string> {
+  const proc = Bun.spawn(["git", "rev-parse", "--show-toplevel"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || "Failed to get repository root");
+  }
+
+  const output = await new Response(proc.stdout).text();
+  return output.trim();
 }
 
 /**
@@ -915,6 +942,130 @@ export async function getLocalBranches(): Promise<string[]> {
 }
 
 /**
+ * Validate branch name using git's own branch ref checks.
+ */
+export async function isValidBranchName(branchName: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(["git", "check-ref-format", "--branch", branchName], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create a new worktree from a start point and create a new branch.
+ */
+export async function createWorktree(path: string, branchName: string, startPoint: string): Promise<void> {
+  const proc = Bun.spawn(["git", "worktree", "add", "-b", branchName, path, startPoint], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to create worktree '${path}' with branch '${branchName}'`);
+  }
+}
+
+/**
+ * Get all worktrees in the repository.
+ * Uses porcelain output for stable parsing.
+ */
+export async function getWorktrees(): Promise<GitWorktree[]> {
+  try {
+    const [repoRootResult, listProc] = await Promise.all([
+      Bun.spawn(["git", "rev-parse", "--show-toplevel"], { stdout: "pipe", stderr: "pipe" }),
+      Bun.spawn(["git", "worktree", "list", "--porcelain"], { stdout: "pipe", stderr: "pipe" }),
+    ]);
+
+    await Promise.all([repoRootResult.exited, listProc.exited]);
+
+    if (repoRootResult.exitCode !== 0 || listProc.exitCode !== 0) {
+      return [];
+    }
+
+    const repoRootOutput = await new Response(repoRootResult.stdout).text();
+    const listOutput = await new Response(listProc.stdout).text();
+    const repoRoot = resolve(repoRootOutput.trim());
+
+    if (!listOutput.trim()) {
+      return [];
+    }
+
+    const blocks = listOutput.trim().split("\n\n");
+    const worktrees: GitWorktree[] = [];
+
+    for (const block of blocks) {
+      const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+      const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+      if (!worktreeLine) {
+        continue;
+      }
+
+      const rawPath = worktreeLine.slice("worktree ".length).trim();
+      if (!rawPath) {
+        continue;
+      }
+
+      const branchLine = lines.find((line) => line.startsWith("branch "));
+      const branchRef = branchLine ? branchLine.slice("branch ".length).trim() : "";
+      const branch = branchRef.startsWith("refs/heads/") ? branchRef.replace("refs/heads/", "") : null;
+      const resolvedPath = resolve(rawPath);
+
+      worktrees.push({
+        path: rawPath,
+        branch,
+        isMain: resolvedPath === repoRoot,
+      });
+    }
+
+    return worktrees;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Remove a worktree path via git.
+ */
+export async function removeWorktree(path: string, force: boolean = false): Promise<void> {
+  const args = force
+    ? ["git", "worktree", "remove", "--force", path]
+    : ["git", "worktree", "remove", path];
+
+  const proc = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+
+  if (proc.exitCode !== 0) {
+    const error = await new Response(proc.stderr).text();
+    throw new Error(error || `Failed to remove worktree '${path}'`);
+  }
+}
+
+/**
+ * Force-remove a directory recursively.
+ * Safe for non-existent paths.
+ */
+export async function removeDirectoryRecursive(path: string): Promise<void> {
+  try {
+    await rm(path, { recursive: true, force: true });
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : `Failed to remove directory '${path}'`
+    );
+  }
+}
+
+/**
  * Get remote branches (origin/*) merged into the given base ref.
  * Returns short names without the "origin/" prefix.
  */
@@ -1245,4 +1396,3 @@ export async function getTagDate(tag: string): Promise<Date | null> {
     return null;
   }
 }
-

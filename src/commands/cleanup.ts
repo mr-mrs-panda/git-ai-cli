@@ -11,8 +11,9 @@ import {
   isAncestor,
   deleteLocalBranch,
   hasOriginRemote,
-  getRemoteMergedBranches,
-  deleteRemoteBranch,
+  getWorktrees,
+  removeWorktree,
+  removeDirectoryRecursive,
 } from "../utils/git.ts";
 import { Spinner } from "../utils/ui.ts";
 
@@ -24,12 +25,14 @@ export interface CleanupOptions {
  * Cleanup merged branches
  * - Optionally switches to main/master if not already there
  * - Fetches from origin
- * - Deletes local branches that are merged in remote
+ * - Deletes local branches that are merged in remote base branch
+ * - Removes worktrees for those branches before deleting branch refs
  * - Only deletes branches that exist on remote (to preserve local-only branches)
  */
 export async function cleanup(options: CleanupOptions = {}): Promise<void> {
   const { autoYes = false } = options;
   const spinner = new Spinner();
+  const PROTECTED_BRANCHES = new Set(["main", "master", "develop", "staging"]);
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -104,33 +107,69 @@ export async function cleanup(options: CleanupOptions = {}): Promise<void> {
   const localBranches = await getLocalBranches();
   const branchesToDelete: string[] = [];
   const remoteMissingBranches: string[] = [];
+  const remoteMissingMergedBranches: string[] = [];
+  const protectedSkippedBranches: string[] = [];
 
-  // Filter out base branch and current branch
-  const candidateBranches = localBranches.filter((branch) => branch !== baseBranch && branch !== currentBranch);
+  const protectedBranches = new Set([
+    ...Array.from(PROTECTED_BRANCHES),
+    baseBranch.toLowerCase(),
+    currentBranch.toLowerCase(),
+  ]);
+
+  const candidateBranches = localBranches.filter((branch) => {
+    const isProtected = protectedBranches.has(branch.toLowerCase());
+    if (isProtected) {
+      protectedSkippedBranches.push(branch);
+      return false;
+    }
+    return true;
+  });
 
   for (const branch of candidateBranches) {
-    // Only consider branches that exist on remote (to preserve local-only branches)
+    // Determine whether the branch still exists on remote.
     const existsOnRemote = await branchExistsOnRemote(branch);
 
-    if (!existsOnRemote) {
-      remoteMissingBranches.push(branch);
-      continue;
-    }
-
-    // Check if the branch is merged
+    // Branch can be safely deleted once merged into origin/base,
+    // even if origin/<branch> was already deleted.
     const baseRef = `origin/${baseBranch}`;
     const isMerged = (await isAncestor(branch, baseRef)) || (await isBranchMerged(branch, baseRef));
 
     if (isMerged) {
       branchesToDelete.push(branch);
+      if (!existsOnRemote) {
+        remoteMissingMergedBranches.push(branch);
+      }
+      continue;
+    }
+
+    if (!existsOnRemote) {
+      remoteMissingBranches.push(branch);
     }
   }
 
   spinner.stop("Analysis complete");
 
+  if (protectedSkippedBranches.length > 0) {
+    p.note(
+      `Skipped ${protectedSkippedBranches.length} protected/current branch(es):\n\n${protectedSkippedBranches
+        .map((b) => `  - ${b}`)
+        .join("\n")}`,
+      "Protected"
+    );
+  }
+
+  if (remoteMissingMergedBranches.length > 0) {
+    p.note(
+      `Found ${remoteMissingMergedBranches.length} merged branch(es) that are already deleted on origin:\n\n${remoteMissingMergedBranches
+        .map((b) => `  - ${b}`)
+        .join("\n")}`,
+      "Remote Already Deleted"
+    );
+  }
+
   if (remoteMissingBranches.length > 0) {
     p.note(
-      `Skipped ${remoteMissingBranches.length} branch(es) because they don't exist on origin:\n\n${remoteMissingBranches
+      `Skipped ${remoteMissingBranches.length} origin-missing branch(es) because they are not merged into origin/${baseBranch}:\n\n${remoteMissingBranches
         .map((b) => `  - ${b}`)
         .join("\n")}`,
       "Remote Missing"
@@ -138,96 +177,8 @@ export async function cleanup(options: CleanupOptions = {}): Promise<void> {
   }
 
   if (branchesToDelete.length === 0) {
-    if (remoteMissingBranches.length === 0) {
-      p.note("No merged branches found that can be safely deleted.", "Nothing to do");
-      return;
-    }
-
-    if (autoYes) {
-      p.note("No merged branches found.", "Nothing to do");
-      return;
-    }
-
-    const confirmDeleteRemoteMissing = await p.confirm({
-      message: `No merged branches found. Delete the ${remoteMissingBranches.length} origin-missing branch(es) anyway?`,
-      initialValue: false,
-    });
-
-    if (p.isCancel(confirmDeleteRemoteMissing) || !confirmDeleteRemoteMissing) {
-      p.note("No branches were deleted.", "Nothing to do");
-      return;
-    }
-
-    branchesToDelete.push(...remoteMissingBranches);
-  }
-
-  // Step 4 (optional): Delete remote branches that are already merged
-  const baseRef = `origin/${baseBranch}`;
-  const remoteMergedCandidates = (await getRemoteMergedBranches(baseRef)).filter(
-    (b) => b !== baseBranch
-  );
-
-  let remoteDeletedCount = 0;
-  let remoteFailedCount = 0;
-
-  if (remoteMergedCandidates.length > 0) {
-    p.note(
-      `Found ${remoteMergedCandidates.length} remote merged branch(es) on origin:\n\n${remoteMergedCandidates
-        .map((b) => `  - origin/${b}`)
-        .join("\n")}`,
-      "Remote Branches"
-    );
-
-    let confirmRemoteDelete = autoYes;
-
-    if (!autoYes) {
-      const response = await p.confirm({
-        message: `Also delete these remote branch(es) from origin?`,
-        initialValue: false,
-      });
-
-      if (p.isCancel(response)) {
-        p.cancel("Cleanup cancelled");
-        process.exit(0);
-      }
-
-      confirmRemoteDelete = response;
-    }
-
-    if (confirmRemoteDelete) {
-      let confirmRemoteDeleteAgain = autoYes;
-
-      if (!autoYes) {
-        const response = await p.confirm({
-          message: `Really delete ${remoteMergedCandidates.length} remote branch(es) on origin? This affects the shared remote.`,
-          initialValue: false,
-        });
-
-        if (p.isCancel(response) || !response) {
-          p.log.info("Skipping remote branch deletion");
-          confirmRemoteDeleteAgain = false;
-        } else {
-          confirmRemoteDeleteAgain = true;
-        }
-      } else {
-        p.log.info("Auto-accepting: Deleting remote branches");
-      }
-
-      if (confirmRemoteDeleteAgain) {
-        for (const branch of remoteMergedCandidates) {
-          spinner.start(`Deleting remote 'origin/${branch}'...`);
-          try {
-            await deleteRemoteBranch(branch);
-            spinner.stop(`Deleted remote 'origin/${branch}'`);
-            remoteDeletedCount++;
-          } catch (error) {
-            spinner.stop(`Failed to delete remote 'origin/${branch}'`);
-            p.log.warn(`Could not delete remote 'origin/${branch}': ${error instanceof Error ? error.message : String(error)}`);
-            remoteFailedCount++;
-          }
-        }
-      }
-    }
+    p.note("No merged branches found that can be safely deleted.", "Nothing to do");
+    return;
   }
 
   // Step 4: Show branches and ask for confirmation
@@ -260,31 +211,69 @@ export async function cleanup(options: CleanupOptions = {}): Promise<void> {
   }
 
   // Step 5: Delete branches
-  let deletedCount = 0;
-  let failedCount = 0;
+  let localDeletedCount = 0;
+  let localFailedCount = 0;
+  const skippedCount = remoteMissingBranches.length + protectedSkippedBranches.length;
+  let worktreesRemovedCount = 0;
+  let worktreesFailedCount = 0;
 
   for (const branch of branchesToDelete) {
+    const worktrees = (await getWorktrees()).filter((wt) => wt.branch === branch && !wt.isMain);
+
+    for (const worktree of worktrees) {
+      spinner.start(`Removing worktree '${worktree.path}' for '${branch}'...`);
+      try {
+        await removeWorktree(worktree.path, true);
+      } catch (error) {
+        p.log.warn(
+          `Worktree remove failed for '${worktree.path}': ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+
+      try {
+        await removeDirectoryRecursive(worktree.path);
+        spinner.stop(`Removed worktree '${worktree.path}'`);
+        worktreesRemovedCount++;
+      } catch (error) {
+        spinner.stop(`Failed to remove worktree '${worktree.path}'`);
+        p.log.warn(
+          `Could not fully remove worktree '${worktree.path}': ${error instanceof Error ? error.message : String(error)}`
+        );
+        worktreesFailedCount++;
+      }
+    }
+
     spinner.start(`Deleting '${branch}'...`);
     try {
       await deleteLocalBranch(branch);
       spinner.stop(`Deleted '${branch}'`);
-      deletedCount++;
+      localDeletedCount++;
     } catch (error) {
-      spinner.stop(`Failed to delete '${branch}'`);
-      p.log.warn(
-        `Could not delete '${branch}': ${error instanceof Error ? error.message : String(error)}`
-      );
-      failedCount++;
+      try {
+        await deleteLocalBranch(branch, true);
+        spinner.stop(`Deleted '${branch}' (force)`);
+        localDeletedCount++;
+      } catch (forcedError) {
+        spinner.stop(`Failed to delete '${branch}'`);
+        p.log.warn(
+          `Could not delete '${branch}': ${error instanceof Error ? error.message : String(error)}`
+        );
+        p.log.warn(
+          `Forced delete failed for '${branch}': ${forcedError instanceof Error ? forcedError.message : String(forcedError)}`
+        );
+        localFailedCount++;
+      }
     }
   }
 
   // Summary
-  if (deletedCount > 0 || remoteDeletedCount > 0) {
+  if (localDeletedCount > 0 || worktreesRemovedCount > 0 || skippedCount > 0) {
     p.note(
-      `Local deleted: ${deletedCount}\n` +
-      `Remote deleted: ${remoteDeletedCount}\n` +
-      (failedCount > 0 ? `Local failed: ${failedCount}\n` : "") +
-      (remoteFailedCount > 0 ? `Remote failed: ${remoteFailedCount}` : ""),
+      `Local branches deleted: ${localDeletedCount}\n` +
+      `Worktrees removed: ${worktreesRemovedCount}\n` +
+      `Skipped branches: ${skippedCount}\n` +
+      (localFailedCount > 0 ? `Local branch delete failed: ${localFailedCount}\n` : "") +
+      (worktreesFailedCount > 0 ? `Worktree remove failed: ${worktreesFailedCount}` : ""),
       "Cleanup Summary"
     );
   } else {

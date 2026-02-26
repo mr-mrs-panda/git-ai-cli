@@ -202,7 +202,8 @@ git-ai commit          # Generate commit message
 git-ai pr              # Generate PR suggestion
 git-ai release         # Create a GitHub release (includes PRs by default)
 git-ai release --no-prs  # Create release without PR info
-git-ai cleanup         # Delete local branches merged in remote
+git-ai cleanup         # Local cleanup: delete merged branches + merged worktrees
+git-ai worktree social-media-master  # Create ../<project>-social-media-master from main
 git-ai settings        # Configure settings
 git-ai --help          # Show help
 git-ai --version       # Show version
@@ -364,19 +365,37 @@ git-ai release -y
 Requires a GitHub token to be configured.
 
 #### Cleanup
-Cleans up local branches that have been merged in the remote:
+Cleans up local branches that have been merged into `origin/main` or `origin/master`:
 ```bash
 # Delete merged branches
 git-ai cleanup
 ```
 
 **What it does:**
-1. Finds all local branches that are fully merged into the remote main/master branch
+1. Fetches from `origin` and checks which local branches are merged into `origin/main` or `origin/master`
 2. Shows you the list of branches to be deleted
-3. Confirms before deletion
-4. Safely deletes merged branches
+3. Removes any non-main worktrees attached to those merged branches (`--force`, with folder cleanup fallback)
+4. Confirms before deletion
+5. Deletes local merged branches only (never deletes remote branches), even if `origin/<branch>` was already deleted
+6. Skips origin-missing branches that are not merged into `origin/main` or `origin/master`
 
 Protected branches (main, master, develop, staging) are never deleted.
+
+#### Worktree
+Creates a new worktree and branch from `main` in a sibling folder:
+```bash
+# Create branch + worktree from main
+git-ai worktree social-media-master
+```
+
+**What it does:**
+1. Validates the provided branch/worktree name with git branch rules
+2. If you are on a non-`main` branch with uncommitted changes, it aborts
+3. Switches to `main` (if needed) and requires `main` to be clean (no uncommitted changes)
+4. Creates a new worktree at `../<project>-<sanitized-name>`
+5. Creates a new branch with the original provided name from `main`
+
+Folder names are sanitized to valid characters (`a-z`, `0-9`, `.`, `_`, `-`).
 
 ## Development
 
@@ -433,4 +452,3 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
