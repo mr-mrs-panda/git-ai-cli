@@ -13,6 +13,7 @@ import {
   getDefaultProviderBaseUrl,
 } from "../utils/model-discovery.ts";
 import { Spinner } from "../utils/ui.ts";
+import { listProviders, providerRequiresApiKey } from "../utils/provider-registry.ts";
 
 const REASONING_LEVELS: Array<{ value: ReasoningEffort; label: string; hint: string }> = [
   { value: "none", label: "None", hint: "No reasoning phase (fastest)" },
@@ -31,6 +32,7 @@ function maskKey(key?: string): string {
 async function showCurrentConfig(): Promise<void> {
   const config = await loadConfig();
   const profile = config.llm.profiles[config.llm.defaultProfile];
+  const fallbackEnv = profile ? getDefaultProviderApiKeyEnv(profile.provider) : "OPENAI_API_KEY";
 
   p.note(
     `  Provider: ${profile?.provider || "openai"}\n` +
@@ -38,7 +40,7 @@ async function showCurrentConfig(): Promise<void> {
       `  Temperature: ${profile?.temperature ?? 0.7}\n` +
       `  Reasoning Effort: ${profile?.reasoningEffort || "low"}\n` +
       `  Base URL: ${profile?.baseUrl || "(provider default)"}\n` +
-      `  API Key Env: ${profile?.apiKeyEnv || "OPENAI_API_KEY"}\n` +
+      `  API Key Env: ${profile?.apiKeyEnv || fallbackEnv}\n` +
       `  API Key (local): ${maskKey(profile?.apiKey)}\n` +
       `  Commit Default Mode: ${config.preferences.commit.defaultMode}\n` +
       `  Commit Always Stage All: ${config.preferences.commit.alwaysStageAll ? "Yes" : "No"}\n` +
@@ -62,29 +64,60 @@ async function runLLMSetupWizard(): Promise<void> {
 
   const provider = await p.select({
     message: "Provider:",
-    options: [
-      { value: "openai", label: "OpenAI", hint: getDefaultProviderBaseUrl("openai") },
-      { value: "gemini", label: "Gemini", hint: getDefaultProviderBaseUrl("gemini") },
-      { value: "anthropic", label: "Anthropic", hint: getDefaultProviderBaseUrl("anthropic") },
-    ],
+    options: listProviders().map((meta) => ({
+      value: meta.id,
+      label: meta.label,
+      hint: meta.defaultBaseUrl,
+    })),
     initialValue: currentProfile.provider,
   });
   if (p.isCancel(provider)) return;
 
   const providerValue = provider as LLMProvider;
   const defaultApiEnv = getDefaultProviderApiKeyEnv(providerValue);
-  const defaultBaseUrl = getDefaultProviderBaseUrl(providerValue);
   const providerChanged = currentProfile.provider !== providerValue;
+  const providerSupportsCustomBaseUrl =
+    providerValue === "custom-openai-compatible" || providerValue === "ollama";
+  const defaultBaseUrl =
+    !providerChanged && currentProfile.baseUrl
+      ? currentProfile.baseUrl
+      : getDefaultProviderBaseUrl(providerValue);
+  const requiresApiKey = providerRequiresApiKey(providerValue);
   let localApiKey = providerChanged ? undefined : currentProfile.apiKey;
+  let resolvedBaseUrl = defaultBaseUrl;
+
+  if (providerSupportsCustomBaseUrl) {
+    const enteredBaseUrl = await p.text({
+      message: "Custom provider base URL:",
+      initialValue: defaultBaseUrl,
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "Base URL is required";
+        try {
+          new URL(trimmed);
+          return undefined;
+        } catch {
+          return "Enter a valid URL (e.g. https://api.example.com/v1)";
+        }
+      },
+    });
+    if (p.isCancel(enteredBaseUrl)) return;
+    resolvedBaseUrl = String(enteredBaseUrl).trim().replace(/\/$/, "");
+  }
 
   if (!localApiKey) {
     const entered = await p.password({
-      message: `Enter ${providerValue} API key:`,
+      message: requiresApiKey
+        ? `Enter ${providerValue} API key:`
+        : `Enter ${providerValue} API key (optional):`,
       mask: "*",
-      validate: (value) => (!value || !value.trim() ? "API key is required" : undefined),
+      validate: (value) => {
+        if (!requiresApiKey) return undefined;
+        return (!value || !value.trim()) ? "API key is required" : undefined;
+      },
     });
     if (p.isCancel(entered)) return;
-    localApiKey = String(entered).trim();
+    localApiKey = String(entered).trim() || undefined;
 
     const immediateSave = new Spinner();
     immediateSave.start("Saving API key...");
@@ -98,7 +131,7 @@ async function runLLMSetupWizard(): Promise<void> {
             temperature: currentProfile.temperature ?? 0.7,
             maxTokens: currentProfile.maxTokens ?? 4096,
             reasoningEffort: currentProfile.reasoningEffort ?? "low",
-            baseUrl: defaultBaseUrl,
+            baseUrl: resolvedBaseUrl,
             apiKeyEnv: defaultApiEnv,
             apiKey: localApiKey,
           },
@@ -108,37 +141,53 @@ async function runLLMSetupWizard(): Promise<void> {
     immediateSave.stop("API key saved");
   }
 
-  const discoveryKey = localApiKey;
-  if (!discoveryKey) return;
+  const discoveryKey = localApiKey || process.env[defaultApiEnv];
 
   const spinner = new Spinner();
   spinner.start(`Loading ${providerValue} models...`);
   let models: Array<{ id: string; label: string; hint?: string }> = [];
   try {
-    models = await discoverProviderModels(providerValue, discoveryKey, defaultBaseUrl);
+    models = await discoverProviderModels(providerValue, discoveryKey, resolvedBaseUrl);
     spinner.stop(`Loaded ${models.length} model(s)`);
   } catch (error) {
     spinner.stop("Failed to load models");
-    p.note(
-      `Could not load models from provider API.\n${error instanceof Error ? error.message : String(error)}`,
-      "Model Discovery Failed"
-    );
-    return;
+    p.log.warn(`Could not load models automatically: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  if (models.length === 0) {
-    p.note("No models returned by provider.", "No Models");
-    return;
-  }
+  let modelValue = "";
+  if (models.length > 0) {
+    const model = await p.select({
+      message: "Model:",
+      options: [
+        ...models.map((m) => ({ value: m.id, label: m.label, hint: m.hint })),
+        { value: "__manual__", label: "Manual model ID entry", hint: "Type model name yourself" },
+      ],
+      initialValue: currentProfile.model && models.some((m) => m.id === currentProfile.model)
+        ? currentProfile.model
+        : models[0]?.id,
+    });
+    if (p.isCancel(model)) return;
 
-  const model = await p.select({
-    message: "Model:",
-    options: models.map((m) => ({ value: m.id, label: m.label, hint: m.hint })),
-    initialValue: currentProfile.model && models.some((m) => m.id === currentProfile.model)
-      ? currentProfile.model
-      : models[0]?.id,
-  });
-  if (p.isCancel(model)) return;
+    if (model === "__manual__") {
+      const manualModel = await p.text({
+        message: "Enter model ID:",
+        initialValue: currentProfile.model || "",
+        validate: (value) => (!value || !value.trim() ? "Model ID is required" : undefined),
+      });
+      if (p.isCancel(manualModel)) return;
+      modelValue = String(manualModel).trim();
+    } else {
+      modelValue = String(model);
+    }
+  } else {
+    const manualModel = await p.text({
+      message: "No models discovered. Enter model ID manually:",
+      initialValue: currentProfile.model || "",
+      validate: (value) => (!value || !value.trim() ? "Model ID is required" : undefined),
+    });
+    if (p.isCancel(manualModel)) return;
+    modelValue = String(manualModel).trim();
+  }
 
   const temperature = await p.text({
     message: "Temperature (0.0 - 2.0):",
@@ -164,11 +213,11 @@ async function runLLMSetupWizard(): Promise<void> {
       profiles: {
         "smart-main": {
           provider: providerValue,
-          model: model as string,
+          model: modelValue,
           temperature: parseFloat(temperature as string),
           maxTokens: currentProfile.maxTokens ?? 4096,
           reasoningEffort: reasoning as ReasoningEffort,
-          baseUrl: defaultBaseUrl,
+          baseUrl: resolvedBaseUrl,
           apiKeyEnv: defaultApiEnv,
           apiKey: localApiKey,
         },
@@ -284,7 +333,7 @@ export async function settings(): Promise<void> {
     if (choice === "view") {
       p.note(
         `Config file location:\n${getConfigLocation()}\n\n` +
-          `Tip: Set provider keys in ENV (OPENAI_API_KEY / GEMINI_API_KEY / ANTHROPIC_API_KEY).`,
+          `Tip: Set provider keys in ENV (OPENAI_API_KEY / GEMINI_API_KEY / ANTHROPIC_API_KEY / OLLAMA_API_KEY).`,
         "Configuration File"
       );
       continue;

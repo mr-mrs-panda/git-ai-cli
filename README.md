@@ -106,9 +106,10 @@ git-ai
 ```
 
 **On first run**, you'll be guided through LLM setup:
-- Choose provider (OpenAI, Gemini, Anthropic)
-- Enter and save API key locally
-- Load available models live from the provider API
+- Choose provider (OpenAI, Gemini, Anthropic, Ollama, or Custom OpenAI-compatible)
+- Enter and save API key locally (optional for Ollama/custom endpoints)
+- Load available models live from the provider API (or local Ollama)
+- Fallback to manual model ID entry if discovery is unavailable
 - Select your default model
 
 ## Configuration
@@ -167,7 +168,7 @@ git-ai settings
 - Separate individual setting points for commit/PR/GitHub options
 
 It allows you to:
-- Discover and select available provider models live (OpenAI, Gemini, Anthropic)
+- Discover and select available provider models live (OpenAI, Gemini, Anthropic, Ollama, custom OpenAI-compatible)
 - Adjust reasoning effort (none, low, medium, high, xhigh)
 - Update temperature
 - Configure commit behavior (grouped/single, always stage all, `commit -y` auto-push)
@@ -187,9 +188,9 @@ It allows you to:
 | `preferences.commit.alwaysStageAll` | Always stage all changes before commit | `true` | `true`, `false` |
 | `preferences.commit.autoPushOnYes` | Auto-push on `commit -y` / `auto -y` | `false` | `true`, `false` |
 | `preferences.pullRequest.createAsDraft` | Create PRs as draft by default | `true` | `true`, `false` |
-| `llm.profiles.<name>.provider` | Provider for profile | `openai` | `openai`, `gemini`, `anthropic` |
+| `llm.profiles.<name>.provider` | Provider for profile | `openai` | `openai`, `gemini`, `anthropic`, `ollama`, `custom-openai-compatible` |
 | `llm.profiles.<name>.apiKeyEnv` | Environment variable to read key from | provider-specific | e.g. `OPENAI_API_KEY` |
-| `llm.profiles.<name>.apiKey` | Optional local stored key | - | provider API key |
+| `llm.profiles.<name>.apiKey` | Optional local stored key | - | provider API key (or empty for local/custom setups) |
 | `githubToken` | GitHub token for PR/release features | - | `ghp-...` or `GITHUB_TOKEN` env var |
 
 ### Available Models

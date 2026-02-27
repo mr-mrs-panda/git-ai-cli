@@ -4,6 +4,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { z } from "zod";
 import { loadConfig, type LLMProfile, type LLMTask } from "./config.ts";
+import { providerRequiresApiKey } from "./provider-registry.ts";
 
 interface InvokeOptions {
   profileName?: string;
@@ -48,14 +49,14 @@ function resolveApiKey(profile: LLMProfile): string | null {
   return null;
 }
 
-function createChatModel(profile: LLMProfile, opts: InvokeOptions = {}): any {
+async function createChatModel(profile: LLMProfile, opts: InvokeOptions = {}): Promise<any> {
   const modelId = profile.model?.trim();
   if (!modelId) {
     throw new Error(`Missing model for provider '${profile.provider}'. Configure it via 'git-ai settings'.`);
   }
 
   const apiKey = resolveApiKey(profile);
-  if (!apiKey) {
+  if (!apiKey && providerRequiresApiKey(profile.provider)) {
     const envHint = profile.apiKeyEnv ? ` (set ${profile.apiKeyEnv})` : "";
     throw new Error(`Missing API key for provider '${profile.provider}'${envHint}`);
   }
@@ -67,7 +68,7 @@ function createChatModel(profile: LLMProfile, opts: InvokeOptions = {}): any {
 
   if (profile.provider === "openai") {
     return new ChatOpenAI({
-      apiKey,
+      apiKey: apiKey || "",
       model: modelId,
       ...(includeTemperature ? { temperature } : {}),
       maxTokens,
@@ -76,9 +77,21 @@ function createChatModel(profile: LLMProfile, opts: InvokeOptions = {}): any {
     } as any);
   }
 
+  if (profile.provider === "custom-openai-compatible") {
+    return new ChatOpenAI({
+      ...(apiKey ? { apiKey } : {}),
+      model: modelId,
+      ...(includeTemperature ? { temperature } : {}),
+      maxTokens,
+      configuration: profile.baseUrl
+        ? { baseURL: profile.baseUrl, defaultHeaders: profile.customHeaders }
+        : { defaultHeaders: profile.customHeaders },
+    } as any);
+  }
+
   if (profile.provider === "gemini") {
     return new ChatGoogleGenerativeAI({
-      apiKey,
+      apiKey: apiKey || "",
       model: modelId,
       ...(includeTemperature ? { temperature } : {}),
       maxOutputTokens: maxTokens,
@@ -86,8 +99,26 @@ function createChatModel(profile: LLMProfile, opts: InvokeOptions = {}): any {
     } as any);
   }
 
+  if (profile.provider === "ollama") {
+    let ChatOllamaCtor: any;
+    try {
+      const mod = await import("@langchain/ollama");
+      ChatOllamaCtor = mod.ChatOllama;
+    } catch {
+      throw new Error(
+        "Ollama provider selected but '@langchain/ollama' is not installed. Run: bun add @langchain/ollama"
+      );
+    }
+
+    return new ChatOllamaCtor({
+      model: modelId,
+      ...(includeTemperature ? { temperature } : {}),
+      ...(profile.baseUrl ? { baseUrl: profile.baseUrl } : {}),
+    } as any);
+  }
+
   return new ChatAnthropic({
-    apiKey,
+    apiKey: apiKey || "",
     model: modelId,
     ...(includeTemperature ? { temperature } : {}),
     maxTokens,
@@ -193,7 +224,8 @@ export async function invokeText(task: LLMTask, prompt: string, opts: InvokeOpti
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
         const model = createChatModel(candidate.profile, opts);
-        const response = await model.invoke([new HumanMessage(prompt)]);
+        const resolvedModel = await model;
+        const response = await resolvedModel.invoke([new HumanMessage(prompt)]);
         const trimmed = getResponseText(response);
         if (!trimmed) {
           throw new Error("Received empty model response");
@@ -229,18 +261,19 @@ export async function invokeStructured<TSchema extends z.ZodTypeAny>(
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
         const model = createChatModel(candidate.profile, opts);
+        const resolvedModel = await model;
 
         if (shouldUseJsonOnlyStructured(candidate.profile)) {
-          return await invokeStructuredJsonFallback(model, prompt, schema);
+          return await invokeStructuredJsonFallback(resolvedModel, prompt, schema);
         }
 
-        const structured = model.withStructuredOutput(schema);
+        const structured = resolvedModel.withStructuredOutput(schema);
         const output = await structured.invoke([new HumanMessage(prompt)]);
         return schema.parse(output);
       } catch (error) {
         if (shouldFallbackFromStructuredOutput(error, candidate.profile.provider)) {
           try {
-            const model = createChatModel(candidate.profile, opts);
+            const model = await createChatModel(candidate.profile, opts);
             return await invokeStructuredJsonFallback(model, prompt, schema);
           } catch (fallbackError) {
             lastError = fallbackError;

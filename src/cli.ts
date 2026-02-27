@@ -16,6 +16,7 @@ import { createWorktreeCommand } from "./commands/worktree.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
 import { discoverProviderModels, getDefaultProviderApiKeyEnv, getDefaultProviderBaseUrl } from "./utils/model-discovery.ts";
 import { Spinner } from "./utils/ui.ts";
+import { listProviders, providerRequiresApiKey } from "./utils/provider-registry.ts";
 
 function showHelp(): void {
   console.log(`
@@ -92,18 +93,18 @@ async function ensureApiKey(): Promise<void> {
 
   p.note(
     "No LLM key found for the active profile.\n" +
-    "Choose OpenAI, Gemini, or Anthropic.\n" +
+    "Choose a provider and model.\n" +
     "Recommended: use environment variables for keys.",
     "Setup Required"
   );
 
   const provider = await p.select({
     message: "Choose a default provider:",
-    options: [
-      { value: "openai", label: "OpenAI", hint: "Default URL: https://api.openai.com/v1" },
-      { value: "gemini", label: "Gemini", hint: "Default URL: https://generativelanguage.googleapis.com" },
-      { value: "anthropic", label: "Anthropic", hint: "Default URL: https://api.anthropic.com" },
-    ],
+    options: listProviders().map((meta) => ({
+      value: meta.id,
+      label: meta.label,
+      hint: `Default URL: ${meta.defaultBaseUrl}`,
+    })),
     initialValue: "openai",
   });
 
@@ -112,13 +113,42 @@ async function ensureApiKey(): Promise<void> {
     process.exit(1);
   }
 
-  const providerValue = provider as "openai" | "gemini" | "anthropic";
+  const providerValue = provider as "openai" | "gemini" | "anthropic" | "ollama" | "custom-openai-compatible";
   const apiKeyEnv = getDefaultProviderApiKeyEnv(providerValue);
-  const baseUrl = getDefaultProviderBaseUrl(providerValue);
+  const needsBaseUrlInput = providerValue === "custom-openai-compatible" || providerValue === "ollama";
+  let baseUrl = getDefaultProviderBaseUrl(providerValue);
+  if (needsBaseUrlInput) {
+    const enteredBaseUrl = await p.text({
+      message: "Provider base URL:",
+      initialValue: baseUrl,
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "Base URL is required";
+        try {
+          new URL(trimmed);
+          return undefined;
+        } catch {
+          return "Enter a valid URL";
+        }
+      },
+    });
+    if (p.isCancel(enteredBaseUrl)) {
+      p.cancel("Setup cancelled. LLM configuration is required.");
+      process.exit(1);
+    }
+    baseUrl = String(enteredBaseUrl).trim().replace(/\/$/, "");
+  }
+
+  const requiresApiKey = providerRequiresApiKey(providerValue);
   const enteredKey = await p.password({
-    message: `Enter your ${providerValue} API key:`,
+    message: requiresApiKey
+      ? `Enter your ${providerValue} API key:`
+      : `Enter your ${providerValue} API key (optional):`,
     mask: "*",
-    validate: (value) => (!value || value.length === 0 ? "API key is required" : undefined),
+    validate: (value) => {
+      if (!requiresApiKey) return undefined;
+      return (!value || value.length === 0) ? "API key is required" : undefined;
+    },
   });
 
   if (p.isCancel(enteredKey)) {
@@ -126,7 +156,7 @@ async function ensureApiKey(): Promise<void> {
     process.exit(1);
   }
 
-  const apiKey = String(enteredKey);
+  const apiKey = String(enteredKey).trim() || undefined;
 
   const saveKeySpinner = new Spinner();
   saveKeySpinner.start("Saving API key...");
@@ -157,24 +187,48 @@ async function ensureApiKey(): Promise<void> {
     spinner.stop(`Loaded ${discoveredModels.length} model(s)`);
   } catch (error) {
     spinner.stop("Failed to load models");
-    p.cancel(`Could not load models from provider API: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
+    p.log.warn(`Could not load models automatically: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  if (discoveredModels.length === 0) {
-    p.cancel("Provider returned no models. Cannot continue setup.");
-    process.exit(1);
-  }
+  let modelValue = "";
+  if (discoveredModels.length > 0) {
+    const model = await p.select({
+      message: "Choose a default model:",
+      options: [
+        ...discoveredModels.map((m) => ({ value: m.id, label: m.label, hint: m.hint })),
+        { value: "__manual__", label: "Manual model ID entry", hint: "Type model name yourself" },
+      ],
+      initialValue: discoveredModels[0]?.id,
+    });
 
-  const model = await p.select({
-    message: "Choose a default model:",
-    options: discoveredModels.map((m) => ({ value: m.id, label: m.label, hint: m.hint })),
-    initialValue: discoveredModels[0]?.id,
-  });
+    if (p.isCancel(model)) {
+      p.cancel("Setup cancelled. LLM configuration is required.");
+      process.exit(1);
+    }
 
-  if (p.isCancel(model)) {
-    p.cancel("Setup cancelled. LLM configuration is required.");
-    process.exit(1);
+    if (model === "__manual__") {
+      const manualModel = await p.text({
+        message: "Enter model ID:",
+        validate: (value) => (!value || !value.trim() ? "Model ID is required" : undefined),
+      });
+      if (p.isCancel(manualModel)) {
+        p.cancel("Setup cancelled. LLM configuration is required.");
+        process.exit(1);
+      }
+      modelValue = String(manualModel).trim();
+    } else {
+      modelValue = String(model);
+    }
+  } else {
+    const manualModel = await p.text({
+      message: "No models discovered. Enter model ID manually:",
+      validate: (value) => (!value || !value.trim() ? "Model ID is required" : undefined),
+    });
+    if (p.isCancel(manualModel)) {
+      p.cancel("Setup cancelled. LLM configuration is required.");
+      process.exit(1);
+    }
+    modelValue = String(manualModel).trim();
   }
 
   spinner.start("Saving configuration...");
@@ -185,7 +239,7 @@ async function ensureApiKey(): Promise<void> {
       profiles: {
         "smart-main": {
           provider: providerValue,
-          model: model as string,
+          model: modelValue,
           temperature: 0.7,
           maxTokens: 4096,
           reasoningEffort: "low",

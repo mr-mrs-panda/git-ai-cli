@@ -9,6 +9,7 @@ Thanks for your interest in contributing! This project is primarily maintained b
 - [Bun](https://bun.sh) v1.3.4 or higher
 - Git
 - API key for at least one provider (OpenAI, Gemini, or Anthropic)
+  - Optional: local Ollama runtime for Ollama provider testing
 
 ### Getting Started
 
@@ -71,6 +72,7 @@ src/
     ├── git.ts          # Git operations
     ├── llm.ts          # LangChain multi-provider integration
     ├── model-discovery.ts # Live model discovery per provider
+    ├── provider-registry.ts # Provider metadata/defaults/capabilities
     └── openai.ts       # Prompt/builders and AI helper functions
 ```
 

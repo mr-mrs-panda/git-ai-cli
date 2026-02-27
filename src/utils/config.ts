@@ -3,7 +3,7 @@ import { mkdir } from "fs/promises";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type CommitMode = "single" | "grouped";
-export type LLMProvider = "openai" | "gemini" | "anthropic";
+export type LLMProvider = "openai" | "gemini" | "anthropic" | "ollama" | "custom-openai-compatible";
 export type LLMTask = "commit" | "pr" | "branch" | "release" | "unwrapped" | "celebrate";
 
 export interface UserPreferences {
@@ -26,6 +26,7 @@ export interface LLMProfile {
   baseUrl?: string;
   apiKeyEnv?: string;
   apiKey?: string;
+  customHeaders?: Record<string, string>;
 }
 
 export interface LLMConfig {
@@ -314,7 +315,24 @@ export async function hasApiKey(): Promise<boolean> {
   const defaultProfile = config.llm.profiles[config.llm.defaultProfile];
   if (!defaultProfile) return false;
   if (!defaultProfile.model || defaultProfile.model.trim().length === 0) return false;
-  return !!defaultProfile.apiKey && defaultProfile.apiKey.trim().length > 0;
+
+  if (defaultProfile.provider === "ollama") {
+    return true;
+  }
+
+  if (defaultProfile.apiKey && defaultProfile.apiKey.trim().length > 0) {
+    return true;
+  }
+
+  if (defaultProfile.apiKeyEnv && process.env[defaultProfile.apiKeyEnv]?.trim()) {
+    return true;
+  }
+
+  if (defaultProfile.provider === "custom-openai-compatible") {
+    return true;
+  }
+
+  return false;
 }
 
 export async function hasGitHubToken(): Promise<boolean> {

@@ -127,6 +127,7 @@ src/
     ├── git.ts         # Git operations
     ├── llm.ts         # LangChain runtime integration
     ├── model-discovery.ts # Provider model discovery
+    ├── provider-registry.ts # Provider metadata/defaults/capabilities
     └── openai.ts      # Prompt/builders and AI helper functions (via llm.ts)
 ```
 

@@ -1,4 +1,5 @@
 import { type LLMProvider } from "./config.ts";
+import { getProviderMeta } from "./provider-registry.ts";
 
 export interface ProviderModelInfo {
   id: string;
@@ -10,10 +11,7 @@ function normalizeBaseUrl(provider: LLMProvider, baseUrl?: string): string {
   if (baseUrl && baseUrl.trim()) {
     return baseUrl.replace(/\/$/, "");
   }
-
-  if (provider === "openai") return "https://api.openai.com/v1";
-  if (provider === "gemini") return "https://generativelanguage.googleapis.com";
-  return "https://api.anthropic.com";
+  return getProviderMeta(provider).defaultBaseUrl;
 }
 
 function uniqueSorted(items: ProviderModelInfo[]): ProviderModelInfo[] {
@@ -45,14 +43,17 @@ async function fetchJson(url: string, init: RequestInit, timeoutMs = 15000): Pro
   }
 }
 
-async function fetchOpenAIModels(apiKey: string, baseUrl?: string): Promise<ProviderModelInfo[]> {
+async function fetchOpenAIModels(apiKey: string | undefined, baseUrl?: string): Promise<ProviderModelInfo[]> {
   const root = normalizeBaseUrl("openai", baseUrl);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey && apiKey.trim()) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
   const data = await fetchJson(`${root}/models`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
   });
 
   const models = Array.isArray(data?.data) ? data.data : [];
@@ -81,6 +82,28 @@ async function fetchGeminiModels(apiKey: string, baseUrl?: string): Promise<Prov
           id,
           label: id,
           hint: methods || undefined,
+        };
+      })
+      .filter((m: ProviderModelInfo) => m.id.length > 0)
+  );
+}
+
+async function fetchOllamaModels(baseUrl?: string): Promise<ProviderModelInfo[]> {
+  const root = normalizeBaseUrl("ollama", baseUrl);
+  const data = await fetchJson(`${root}/api/tags`, {
+    method: "GET",
+  });
+
+  const models = Array.isArray(data?.models) ? data.models : [];
+  return uniqueSorted(
+    models
+      .map((m: any) => {
+        const id = String(m?.name || m?.model || "");
+        const size = typeof m?.size === "number" ? `${Math.round(m.size / (1024 * 1024))} MB` : "";
+        return {
+          id,
+          label: id,
+          hint: size || undefined,
         };
       })
       .filter((m: ProviderModelInfo) => m.id.length > 0)
@@ -116,28 +139,33 @@ async function fetchAnthropicModels(apiKey: string, baseUrl?: string): Promise<P
 
 export async function discoverProviderModels(
   provider: LLMProvider,
-  apiKey: string,
+  apiKey?: string,
   baseUrl?: string
 ): Promise<ProviderModelInfo[]> {
-  if (!apiKey || !apiKey.trim()) {
+  const requiresApiKey = getProviderMeta(provider).requiresApiKey;
+  if (requiresApiKey && (!apiKey || !apiKey.trim())) {
     throw new Error(`Missing API key for provider '${provider}'`);
   }
 
   if (provider === "openai") {
     return fetchOpenAIModels(apiKey, baseUrl);
   }
-  if (provider === "gemini") {
-    return fetchGeminiModels(apiKey, baseUrl);
+  if (provider === "custom-openai-compatible") {
+    return fetchOpenAIModels(apiKey, normalizeBaseUrl("custom-openai-compatible", baseUrl));
   }
-  return fetchAnthropicModels(apiKey, baseUrl);
+  if (provider === "gemini") {
+    return fetchGeminiModels(apiKey || "", baseUrl);
+  }
+  if (provider === "ollama") {
+    return fetchOllamaModels(baseUrl);
+  }
+  return fetchAnthropicModels(apiKey || "", baseUrl);
 }
 
 export function getDefaultProviderBaseUrl(provider: LLMProvider): string {
-  return normalizeBaseUrl(provider);
+  return getProviderMeta(provider).defaultBaseUrl;
 }
 
 export function getDefaultProviderApiKeyEnv(provider: LLMProvider): string {
-  if (provider === "openai") return "OPENAI_API_KEY";
-  if (provider === "gemini") return "GEMINI_API_KEY";
-  return "ANTHROPIC_API_KEY";
+  return getProviderMeta(provider).defaultApiKeyEnv || "OPENAI_API_KEY";
 }
