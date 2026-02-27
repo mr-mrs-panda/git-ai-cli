@@ -63,17 +63,26 @@ bun run build
 Config stored at `~/.config/git-ai/config.json`:
 ```json
 {
-  "openaiApiKey": "sk-...",
   "githubToken": "ghp_...",
-  "model": "gpt-5.2",
-  "temperature": 1,
-  "reasoningEffort": "low"
+  "llm": {
+    "defaultProfile": "smart-main",
+    "profiles": {
+      "smart-main": {
+        "provider": "openai",
+        "model": "provider-model-id",
+        "temperature": 0.7,
+        "reasoningEffort": "low",
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKeyEnv": "OPENAI_API_KEY"
+      }
+    }
+  }
 }
 ```
 
 **Token Fallback Chain:**
 - GitHub: config.githubToken → process.env.GITHUB_TOKEN → prompt user
-- OpenAI: config.openaiApiKey → prompt user
+- LLM provider key: config.llm.profiles.smart-main.apiKey → process.env.<apiKeyEnv> → prompt user
 
 ---
 
@@ -86,7 +95,7 @@ Commands (user-facing)
     ↓
 Services (business logic)
     ↓
-Utils (git, OpenAI, config operations)
+Utils (git, LLM, config operations)
 ```
 
 **Key Principles:**
@@ -116,7 +125,10 @@ src/
 └── utils/             # Low-level operations
     ├── config.ts      # Config file management
     ├── git.ts         # Git operations
-    └── openai.ts      # OpenAI API interactions
+    ├── llm.ts         # LangChain runtime integration
+    ├── model-discovery.ts # Provider model discovery
+    ├── provider-registry.ts # Provider metadata/defaults/capabilities
+    └── openai.ts      # Prompt/builders and AI helper functions (via llm.ts)
 ```
 
 ---
@@ -248,17 +260,14 @@ spinner.stop("Done!");
 
 **Why:** When git commands output directly to console (stdout: "inherit"), they interfere with the spinner's rendering. Always pipe output during spinner operations.
 
-### 6. OpenAI Reasoning Output
+### 6. Reasoning Output
 
 **Problem:** When `reasoning_effort` is set to "low"/"medium"/"high", the AI includes reasoning text before the actual response, breaking regex parsers.
 
 **Solution:** For structured outputs that need regex parsing, set `reasoning_effort: "none"`:
 ```typescript
-const response = await client.chat.completions.create({
-  model: config.model || "gpt-5.2",
-  messages: [{ role: "user", content: prompt }],
-  temperature: 1,
-  reasoning_effort: "none", // Disables reasoning phase
+const result = await invokeText("branch", prompt, {
+  reasoningEffort: "none", // Disables reasoning phase for deterministic parsing
 });
 ```
 
@@ -283,7 +292,8 @@ if (!typeMatch || !nameMatch) {
 **`generateAndCommit(options)`**
 - Stages all changes (if not already staged)
 - Filters out large files (>100KB) and migrations
-- Generates conventional commit message via OpenAI
+- In grouped mode: uses a single structured AI planning call (groups + per-group messages)
+- In single mode: generates conventional commit message via configured LLM provider
 - Executes commit with confirmation
 - Returns commit message or null if cancelled
 
@@ -319,7 +329,7 @@ const suggestion = await analyzeBranchName();
 - Analyzes commits since last version tag
 - Fetches merged PRs for richer context (if GitHub token available)
 - Uses AI to suggest version bump type (major/minor/patch), considering PR labels
-- Generates release title and notes via OpenAI (with PR references)
+- Generates release title and notes via configured LLM provider (with PR references)
 - Creates git tag and pushes to origin
 - Creates GitHub release (if GitHub remote exists)
 - Returns `ReleaseResult | null`

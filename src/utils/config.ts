@@ -3,6 +3,8 @@ import { mkdir } from "fs/promises";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type CommitMode = "single" | "grouped";
+export type LLMProvider = "openai" | "gemini" | "anthropic" | "ollama" | "custom-openai-compatible";
+export type LLMTask = "commit" | "pr" | "branch" | "release" | "unwrapped" | "celebrate";
 
 export interface UserPreferences {
   commit: {
@@ -15,189 +17,336 @@ export interface UserPreferences {
   };
 }
 
-export interface Config {
-  openaiApiKey?: string;
-  githubToken?: string;
+export interface LLMProfile {
+  provider: LLMProvider;
   model?: string;
   temperature?: number;
+  maxTokens?: number;
   reasoningEffort?: ReasoningEffort;
-  preferences?: UserPreferences;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  apiKey?: string;
+  customHeaders?: Record<string, string>;
 }
 
-const DEFAULT_CONFIG: Config = {
-  model: "gpt-5.2",
-  temperature: 1,
-  reasoningEffort: "low",
-  preferences: {
-    commit: {
-      alwaysStageAll: true,
-      defaultMode: "grouped",
-      autoPushOnYes: false,
-    },
-    pullRequest: {
-      createAsDraft: true,
-    },
-  },
-};
-
-function getDefaultPreferences(): UserPreferences {
-  const preferences = DEFAULT_CONFIG.preferences;
-  if (!preferences) {
-    throw new Error("Default preferences are missing");
-  }
-
-  return structuredClone(preferences);
-}
-
-function mergeConfigWithDefaults(config: Partial<Config>): Config {
-  const defaultPreferences = getDefaultPreferences();
-  const configPreferences = config.preferences;
-
-  return {
-    ...DEFAULT_CONFIG,
-    ...config,
-    preferences: {
-      ...defaultPreferences,
-      ...configPreferences,
-      commit: {
-        ...defaultPreferences.commit,
-        ...(configPreferences?.commit || {}),
-      },
-      pullRequest: {
-        ...defaultPreferences.pullRequest,
-        ...(configPreferences?.pullRequest || {}),
-      },
-    },
+export interface LLMConfig {
+  defaultProfile: string;
+  profiles: Record<string, LLMProfile>;
+  taskPresets: Record<LLMTask, string>;
+  retry: {
+    maxAttempts: number;
+    backoffMs: number;
+  };
+  timeouts: {
+    requestMs: number;
   };
 }
 
-/**
- * Get the config directory path
- */
+export interface Config {
+  githubToken?: string;
+  llm: LLMConfig;
+  preferences: UserPreferences;
+}
+
+type PartialLLMConfig = {
+  defaultProfile?: string;
+  profiles?: Record<string, Partial<LLMProfile>>;
+  taskPresets?: Partial<Record<LLMTask, string>>;
+  retry?: Partial<LLMConfig["retry"]>;
+  timeouts?: Partial<LLMConfig["timeouts"]>;
+};
+
+type PartialUserPreferences = {
+  commit?: Partial<UserPreferences["commit"]>;
+  pullRequest?: Partial<UserPreferences["pullRequest"]>;
+};
+
+export interface ConfigUpdate {
+  githubToken?: string;
+  llm?: PartialLLMConfig;
+  preferences?: PartialUserPreferences;
+}
+
+const DEFAULT_LLM_CONFIG: LLMConfig = {
+  defaultProfile: "smart-main",
+  profiles: {
+    "smart-main": {
+      provider: "openai",
+      temperature: 0.7,
+      maxTokens: 4096,
+      reasoningEffort: "low",
+      baseUrl: "https://api.openai.com/v1",
+      apiKeyEnv: "OPENAI_API_KEY",
+    },
+  },
+  taskPresets: {
+    commit: "smart-main",
+    pr: "smart-main",
+    branch: "smart-main",
+    release: "smart-main",
+    unwrapped: "smart-main",
+    celebrate: "smart-main",
+  },
+  retry: {
+    maxAttempts: 3,
+    backoffMs: 400,
+  },
+  timeouts: {
+    requestMs: 60000,
+  },
+};
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  commit: {
+    alwaysStageAll: true,
+    defaultMode: "grouped",
+    autoPushOnYes: false,
+  },
+  pullRequest: {
+    createAsDraft: true,
+  },
+};
+
+const DEFAULT_CONFIG: Config = {
+  llm: DEFAULT_LLM_CONFIG,
+  preferences: DEFAULT_PREFERENCES,
+};
+
+function hasLegacyConfigFields(input: unknown): boolean {
+  if (!input || typeof input !== "object") {
+    return false;
+  }
+
+  const candidate = input as Record<string, unknown>;
+  return (
+    "openaiApiKey" in candidate ||
+    "model" in candidate ||
+    "temperature" in candidate ||
+    "reasoningEffort" in candidate
+  );
+}
+
+function migrateLegacyConfig(legacy: Record<string, unknown>): ConfigUpdate {
+  const model = typeof legacy.model === "string" ? legacy.model : undefined;
+  const temperature = typeof legacy.temperature === "number" ? legacy.temperature : undefined;
+  const reasoningEffort =
+    legacy.reasoningEffort === "none" ||
+    legacy.reasoningEffort === "low" ||
+    legacy.reasoningEffort === "medium" ||
+    legacy.reasoningEffort === "high" ||
+    legacy.reasoningEffort === "xhigh"
+      ? legacy.reasoningEffort
+      : undefined;
+
+  const openaiApiKey = typeof legacy.openaiApiKey === "string" ? legacy.openaiApiKey : undefined;
+  const githubToken = typeof legacy.githubToken === "string" ? legacy.githubToken : undefined;
+
+  const preferences = (legacy.preferences && typeof legacy.preferences === "object")
+    ? legacy.preferences as ConfigUpdate["preferences"]
+    : undefined;
+
+  return {
+    githubToken,
+    llm: {
+      defaultProfile: "smart-main",
+      profiles: {
+        "smart-main": {
+          provider: "openai",
+          model,
+          temperature,
+          reasoningEffort,
+          baseUrl: "https://api.openai.com/v1",
+          apiKeyEnv: "OPENAI_API_KEY",
+          apiKey: openaiApiKey,
+        },
+      },
+    },
+    preferences,
+  };
+}
+
+function getDefaultConfig(): Config {
+  return structuredClone(DEFAULT_CONFIG);
+}
+
+function mergeConfigWithDefaults(config: ConfigUpdate): Config {
+  const defaults = getDefaultConfig();
+
+  const mergedProfiles: Record<string, LLMProfile> = { ...defaults.llm.profiles };
+  for (const [name, profile] of Object.entries(config.llm?.profiles || {})) {
+    const base = mergedProfiles[name] || defaults.llm.profiles[defaults.llm.defaultProfile];
+    if (!base) continue;
+    mergedProfiles[name] = { ...base, ...profile };
+  }
+
+  const llm: LLMConfig = {
+    defaultProfile: config.llm?.defaultProfile ?? defaults.llm.defaultProfile,
+    profiles: mergedProfiles,
+    taskPresets: {
+      ...defaults.llm.taskPresets,
+      ...(config.llm?.taskPresets || {}),
+    },
+    retry: {
+      maxAttempts: config.llm?.retry?.maxAttempts ?? defaults.llm.retry.maxAttempts,
+      backoffMs: config.llm?.retry?.backoffMs ?? defaults.llm.retry.backoffMs,
+    },
+    timeouts: {
+      requestMs: config.llm?.timeouts?.requestMs ?? defaults.llm.timeouts.requestMs,
+    },
+  };
+
+  const preferences: UserPreferences = {
+    commit: {
+      alwaysStageAll:
+        config.preferences?.commit?.alwaysStageAll ?? defaults.preferences.commit.alwaysStageAll,
+      defaultMode:
+        config.preferences?.commit?.defaultMode ?? defaults.preferences.commit.defaultMode,
+      autoPushOnYes:
+        config.preferences?.commit?.autoPushOnYes ?? defaults.preferences.commit.autoPushOnYes,
+    },
+    pullRequest: {
+      createAsDraft:
+        config.preferences?.pullRequest?.createAsDraft ?? defaults.preferences.pullRequest.createAsDraft,
+    },
+  };
+
+  return {
+    githubToken: config.githubToken,
+    llm,
+    preferences,
+  };
+}
+
 function getConfigDir(): string {
   const home = process.env.HOME || process.env.USERPROFILE;
   if (!home) {
     throw new Error("Could not determine home directory");
   }
 
-  // Use XDG_CONFIG_HOME if set, otherwise use ~/.config
   const configBase = process.env.XDG_CONFIG_HOME || join(home, ".config");
   return join(configBase, "git-ai");
 }
 
-/**
- * Get the config file path
- */
 function getConfigPath(): string {
   return join(getConfigDir(), "config.json");
 }
 
-/**
- * Ensure config directory exists
- */
 async function ensureConfigDir(): Promise<void> {
   const configDir = getConfigDir();
   try {
     await mkdir(configDir, { recursive: true });
   } catch (error) {
-    // Ignore if directory already exists
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;
     }
   }
 }
 
-/**
- * Load config from file
- */
 export async function loadConfig(): Promise<Config> {
   const configPath = getConfigPath();
+  const file = Bun.file(configPath);
+  const exists = await file.exists();
 
-  try {
-    const file = Bun.file(configPath);
-    const exists = await file.exists();
-
-    if (!exists) {
-      return mergeConfigWithDefaults({});
-    }
-
-    const content = await file.text();
-    const config = JSON.parse(content) as Config;
-
-    return mergeConfigWithDefaults(config);
-  } catch (error) {
-    // If file doesn't exist or is invalid, return defaults
-    return mergeConfigWithDefaults({});
+  if (!exists) {
+    return getDefaultConfig();
   }
+
+  const content = await file.text();
+  const parsed = JSON.parse(content) as ConfigUpdate & Record<string, unknown>;
+
+  if (hasLegacyConfigFields(parsed)) {
+    return mergeConfigWithDefaults(migrateLegacyConfig(parsed));
+  }
+
+  return mergeConfigWithDefaults(parsed);
 }
 
-/**
- * Save config to file
- */
 export async function saveConfig(config: Config): Promise<void> {
   await ensureConfigDir();
-
   const configPath = getConfigPath();
   const content = JSON.stringify(config, null, 2);
-
   await Bun.write(configPath, content);
 }
 
-/**
- * Update specific config values
- */
-export async function updateConfig(updates: Partial<Config>): Promise<Config> {
-  const config = await loadConfig();
-  const newConfig = mergeConfigWithDefaults({
-    ...config,
-    ...updates,
+export async function updateConfig(updates: ConfigUpdate): Promise<Config> {
+  const current = await loadConfig();
+
+  const mergedInput: ConfigUpdate = {
+    githubToken: updates.githubToken ?? current.githubToken,
+    llm: {
+      ...current.llm,
+      ...updates.llm,
+      profiles: {
+        ...current.llm.profiles,
+        ...(updates.llm?.profiles || {}),
+      },
+      taskPresets: {
+        ...current.llm.taskPresets,
+        ...(updates.llm?.taskPresets || {}),
+      },
+      retry: {
+        ...current.llm.retry,
+        ...(updates.llm?.retry || {}),
+      },
+      timeouts: {
+        ...current.llm.timeouts,
+        ...(updates.llm?.timeouts || {}),
+      },
+    },
     preferences: {
-      ...config.preferences,
-      ...updates.preferences,
       commit: {
-        ...(config.preferences?.commit || {}),
+        ...current.preferences.commit,
         ...(updates.preferences?.commit || {}),
       },
       pullRequest: {
-        ...(config.preferences?.pullRequest || {}),
+        ...current.preferences.pullRequest,
         ...(updates.preferences?.pullRequest || {}),
       },
     },
-  });
+  };
 
-  await saveConfig(newConfig);
-  return newConfig;
+  const next = mergeConfigWithDefaults(mergedInput);
+  await saveConfig(next);
+  return next;
 }
 
-/**
- * Check if API key is configured
- */
 export async function hasApiKey(): Promise<boolean> {
   const config = await loadConfig();
-  return !!config.openaiApiKey && config.openaiApiKey.length > 0;
+  const defaultProfile = config.llm.profiles[config.llm.defaultProfile];
+  if (!defaultProfile) return false;
+  if (!defaultProfile.model || defaultProfile.model.trim().length === 0) return false;
+
+  if (defaultProfile.provider === "ollama") {
+    return true;
+  }
+
+  if (defaultProfile.apiKey && defaultProfile.apiKey.trim().length > 0) {
+    return true;
+  }
+
+  if (defaultProfile.apiKeyEnv && process.env[defaultProfile.apiKeyEnv]?.trim()) {
+    return true;
+  }
+
+  if (defaultProfile.provider === "custom-openai-compatible") {
+    return true;
+  }
+
+  return false;
 }
 
-/**
- * Check if GitHub token is configured
- */
 export async function hasGitHubToken(): Promise<boolean> {
   const config = await loadConfig();
   return !!config.githubToken && config.githubToken.length > 0;
 }
 
-/**
- * Get GitHub token from config or environment variable
- * Config takes precedence over environment variable
- */
 export async function getGitHubToken(): Promise<string | null> {
   const config = await loadConfig();
 
-  // First check config
   if (config.githubToken && config.githubToken.length > 0) {
     return config.githubToken;
   }
 
-  // Fall back to environment variable
   const envToken = process.env.GITHUB_TOKEN;
   if (envToken && envToken.length > 0) {
     return envToken;
@@ -206,16 +355,10 @@ export async function getGitHubToken(): Promise<string | null> {
   return null;
 }
 
-/**
- * Get config file location for display
- */
 export function getConfigLocation(): string {
   return getConfigPath();
 }
 
-/**
- * Delete config file
- */
 export async function deleteConfig(): Promise<void> {
   const configPath = getConfigPath();
   try {
@@ -223,4 +366,24 @@ export async function deleteConfig(): Promise<void> {
   } catch {
     // Ignore errors if file doesn't exist
   }
+}
+
+export async function getTaskProfile(task: LLMTask): Promise<{ name: string; profile: LLMProfile }> {
+  const config = await loadConfig();
+  const profileName = config.llm.taskPresets[task] || config.llm.defaultProfile;
+  const profile = config.llm.profiles[profileName];
+  if (!profile) {
+    throw new Error(`LLM profile '${profileName}' not found for task '${task}'.`);
+  }
+
+  return { name: profileName, profile };
+}
+
+export async function getProfileByName(name: string): Promise<LLMProfile> {
+  const config = await loadConfig();
+  const profile = config.llm.profiles[name];
+  if (!profile) {
+    throw new Error(`LLM profile '${name}' not found.`);
+  }
+  return profile;
 }

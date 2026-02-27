@@ -1,8 +1,7 @@
 import { Octokit } from "octokit";
-import { loadConfig } from "../utils/config.ts";
 import { parseGitHubRepo, getLatestVersionTag } from "../utils/git.ts";
 import { getGitHubToken } from "../utils/config.ts";
-import OpenAI from "openai";
+import { invokeText } from "../utils/llm.ts";
 
 export interface UnwrappedStats {
   // Time range
@@ -734,7 +733,7 @@ async function getReleaseStats(
       name: string | null;
       published_at: string | null;
       created_at: string;
-      body: string | null;
+      body?: string | null;
     }> = [];
     
     let page = 1;
@@ -1793,8 +1792,6 @@ function getDevPersonality(stats: UnwrappedStats, language: Language = "english"
 
 async function generateAISummary(stats: UnwrappedStats, language: Language = "english"): Promise<string> {
   try {
-    const config = await loadConfig();
-
     const fallbackHtml = language === "german"
       ? `<p>🚀 Dieses Jahr gab es bei <strong>${stats.repoOwner}/${stats.repoName}</strong> <strong>${stats.totalCommits}</strong> Commits von ${stats.topAuthors.length} Mitwirkenden.</p>
 <p>Das Team fügte <strong>+${stats.linesAdded.toLocaleString()}</strong> Zeilen hinzu und entfernte <strong>-${stats.linesDeleted.toLocaleString()}</strong> Zeilen Code.</p>
@@ -1804,12 +1801,6 @@ ${stats.mergedPRs > 0 ? `<p><strong>${stats.mergedPRs}</strong> Pull Requests wu
 <p>The team added <strong>+${stats.linesAdded.toLocaleString()}</strong> lines and removed <strong>-${stats.linesDeleted.toLocaleString()}</strong> lines of code.</p>
 ${stats.mergedPRs > 0 ? `<p><strong>${stats.mergedPRs}</strong> pull requests were merged and the project shipped <strong>${stats.totalReleases}</strong> releases.</p>` : `<p>The project shipped <strong>${stats.totalReleases}</strong> releases.</p>`}
 <p>🎉 Keep up the great work!</p>`;
-
-    if (!config.openaiApiKey) {
-      return fallbackHtml;
-    }
-
-    const client = new OpenAI({ apiKey: config.openaiApiKey });
 
     // Generate monthly release summaries if there are releases
     let monthlyReleaseSummaries = "";
@@ -1857,13 +1848,7 @@ ${releaseInfo}
 Output as simple bullet list (•) without headings.`;
 
         try {
-          const response = await client.chat.completions.create({
-            model: config.model || "gpt-5.2",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.7,
-          });
-
-          const content = response.choices[0]?.message?.content?.trim() || "";
+          const content = await invokeText("unwrapped", prompt, { temperature: 0.7 });
           return { monthName, summary: content, releaseCount: releases.length };
         } catch {
           return { monthName, summary: "", releaseCount: releases.length };
@@ -2019,12 +2004,7 @@ Format:
 
 OUTPUT ONLY THE HTML, nothing else.`;
 
-    const response = await client.chat.completions.create({
-      model: config.model || "gpt-5.2",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const content = response.choices[0]?.message?.content?.trim();
+    const content = await invokeText("unwrapped", prompt);
     
     // Validate it looks like HTML
     if (content && (content.includes("<p>") || content.includes("<ul>"))) {
@@ -2049,4 +2029,3 @@ OUTPUT ONLY THE HTML, nothing else.`;
 <p>🎉 Amazing work!</p>`;
   }
 }
-

@@ -14,7 +14,9 @@ import { unwrapped } from "./commands/unwrapped.ts";
 import { prCelebrate } from "./commands/pr-celebrate.ts";
 import { createWorktreeCommand } from "./commands/worktree.ts";
 import { hasApiKey, updateConfig, getConfigLocation } from "./utils/config.ts";
+import { discoverProviderModels, getDefaultProviderApiKeyEnv, getDefaultProviderBaseUrl } from "./utils/model-discovery.ts";
 import { Spinner } from "./utils/ui.ts";
+import { listProviders, providerRequiresApiKey } from "./utils/provider-registry.ts";
 
 function showHelp(): void {
   console.log(`
@@ -35,7 +37,7 @@ Commands:
   celebrate Celebrate your current PR with fancy stats and AI
   cleanup   Delete local merged branches and their merged worktrees
   worktree  Create a new worktree from main with matching branch name
-  settings  Configure AI model, reasoning effort, and other settings
+  settings  Configure LLM profiles, provider keys, and preferences
   help      Show this help message
 
 Options:
@@ -79,7 +81,7 @@ Documentation:
 }
 
 /**
- * Check if API key is configured, prompt if not
+ * Check if LLM key is configured, prompt if not
  */
 async function ensureApiKey(): Promise<void> {
   if (await hasApiKey()) {
@@ -90,39 +92,170 @@ async function ensureApiKey(): Promise<void> {
   p.intro("🤖 Git AI CLI - First Time Setup");
 
   p.note(
-    "OpenAI API key is required to use this tool.\n" +
-    "Get your API key from: https://platform.openai.com/api-keys",
+    "No LLM key found for the active profile.\n" +
+    "Choose a provider and model.\n" +
+    "Recommended: use environment variables for keys.",
     "Setup Required"
   );
 
-  const apiKey = await p.text({
-    message: "Enter your OpenAI API key:",
-    placeholder: "sk-...",
-    validate: (value) => {
-      if (!value || value.length === 0) {
-        return "API key is required";
-      }
-      if (!value.startsWith("sk-")) {
-        return "API key should start with 'sk-'";
-      }
-    },
+  const provider = await p.select({
+    message: "Choose a default provider:",
+    options: listProviders().map((meta) => ({
+      value: meta.id,
+      label: meta.label,
+      hint: `Default URL: ${meta.defaultBaseUrl}`,
+    })),
+    initialValue: "openai",
   });
 
-  if (p.isCancel(apiKey)) {
-    p.cancel("Setup cancelled. API key is required to use this tool.");
+  if (p.isCancel(provider)) {
+    p.cancel("Setup cancelled. LLM configuration is required.");
     process.exit(1);
   }
 
+  const providerValue = provider as "openai" | "gemini" | "anthropic" | "ollama" | "custom-openai-compatible";
+  const apiKeyEnv = getDefaultProviderApiKeyEnv(providerValue);
+  const needsBaseUrlInput = providerValue === "custom-openai-compatible" || providerValue === "ollama";
+  let baseUrl = getDefaultProviderBaseUrl(providerValue);
+  if (needsBaseUrlInput) {
+    const enteredBaseUrl = await p.text({
+      message: "Provider base URL:",
+      initialValue: baseUrl,
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "Base URL is required";
+        try {
+          new URL(trimmed);
+          return undefined;
+        } catch {
+          return "Enter a valid URL";
+        }
+      },
+    });
+    if (p.isCancel(enteredBaseUrl)) {
+      p.cancel("Setup cancelled. LLM configuration is required.");
+      process.exit(1);
+    }
+    baseUrl = String(enteredBaseUrl).trim().replace(/\/$/, "");
+  }
+
+  const requiresApiKey = providerRequiresApiKey(providerValue);
+  const enteredKey = await p.password({
+    message: requiresApiKey
+      ? `Enter your ${providerValue} API key:`
+      : `Enter your ${providerValue} API key (optional):`,
+    mask: "*",
+    validate: (value) => {
+      if (!requiresApiKey) return undefined;
+      return (!value || value.length === 0) ? "API key is required" : undefined;
+    },
+  });
+
+  if (p.isCancel(enteredKey)) {
+    p.cancel("Setup cancelled. LLM configuration is required.");
+    process.exit(1);
+  }
+
+  const apiKey = String(enteredKey).trim() || undefined;
+
+  const saveKeySpinner = new Spinner();
+  saveKeySpinner.start("Saving API key...");
+  await updateConfig({
+    llm: {
+      defaultProfile: "smart-main",
+      profiles: {
+        "smart-main": {
+          provider: providerValue,
+          model: undefined,
+          temperature: 0.7,
+          maxTokens: 4096,
+          reasoningEffort: "low",
+          baseUrl,
+          apiKeyEnv,
+          apiKey,
+        },
+      },
+    },
+  });
+  saveKeySpinner.stop("API key saved");
+
   const spinner = new Spinner();
+  spinner.start(`Loading available ${providerValue} models...`);
+  let discoveredModels: Array<{ id: string; label: string; hint?: string }> = [];
+  try {
+    discoveredModels = await discoverProviderModels(providerValue, apiKey, baseUrl);
+    spinner.stop(`Loaded ${discoveredModels.length} model(s)`);
+  } catch (error) {
+    spinner.stop("Failed to load models");
+    p.log.warn(`Could not load models automatically: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  let modelValue = "";
+  if (discoveredModels.length > 0) {
+    const model = await p.select({
+      message: "Choose a default model:",
+      options: [
+        ...discoveredModels.map((m) => ({ value: m.id, label: m.label, hint: m.hint })),
+        { value: "__manual__", label: "Manual model ID entry", hint: "Type model name yourself" },
+      ],
+      initialValue: discoveredModels[0]?.id,
+    });
+
+    if (p.isCancel(model)) {
+      p.cancel("Setup cancelled. LLM configuration is required.");
+      process.exit(1);
+    }
+
+    if (model === "__manual__") {
+      const manualModel = await p.text({
+        message: "Enter model ID:",
+        validate: (value) => (!value || !value.trim() ? "Model ID is required" : undefined),
+      });
+      if (p.isCancel(manualModel)) {
+        p.cancel("Setup cancelled. LLM configuration is required.");
+        process.exit(1);
+      }
+      modelValue = String(manualModel).trim();
+    } else {
+      modelValue = String(model);
+    }
+  } else {
+    const manualModel = await p.text({
+      message: "No models discovered. Enter model ID manually:",
+      validate: (value) => (!value || !value.trim() ? "Model ID is required" : undefined),
+    });
+    if (p.isCancel(manualModel)) {
+      p.cancel("Setup cancelled. LLM configuration is required.");
+      process.exit(1);
+    }
+    modelValue = String(manualModel).trim();
+  }
+
   spinner.start("Saving configuration...");
 
-  await updateConfig({ openaiApiKey: apiKey as string });
+  await updateConfig({
+    llm: {
+      defaultProfile: "smart-main",
+      profiles: {
+        "smart-main": {
+          provider: providerValue,
+          model: modelValue,
+          temperature: 0.7,
+          maxTokens: 4096,
+          reasoningEffort: "low",
+          baseUrl,
+          apiKeyEnv,
+          apiKey,
+        },
+      },
+    },
+  });
 
   spinner.stop("Configuration saved!");
 
   p.note(
-    `Your API key has been saved to:\n${getConfigLocation()}\n\n` +
-    "You can update it anytime by editing this file or running the setup again.",
+    `Configuration saved to:\n${getConfigLocation()}\n\n` +
+    `Tip: Set ${apiKeyEnv} in your shell for safer secret handling.`,
     "Success"
   );
 
@@ -195,7 +328,7 @@ async function runInteractive(): Promise<string> {
       {
         value: "settings",
         label: "settings: Configure settings",
-        hint: "Change model, reasoning effort, and other options",
+        hint: "Change provider/model and other options",
       },
     ],
   });

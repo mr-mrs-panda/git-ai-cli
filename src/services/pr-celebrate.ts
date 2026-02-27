@@ -1,8 +1,8 @@
 import { Octokit } from "octokit";
-import { loadConfig } from "../utils/config.ts";
 import { parseGitHubRepo, getCurrentBranch, getBaseBranch, getBranchDiffs } from "../utils/git.ts";
 import { getGitHubToken } from "../utils/config.ts";
-import OpenAI from "openai";
+import { invokeStructured } from "../utils/llm.ts";
+import { z } from "zod";
 
 export interface PRCelebrateStats {
     // PR info
@@ -1442,14 +1442,6 @@ async function generateAICelebrationContent(stats: PRCelebrateStats, language: L
     const defaultContent = getDefaultCelebrationContent(stats, language);
 
     try {
-        const config = await loadConfig();
-
-        if (!config.openaiApiKey) {
-            return defaultContent;
-        }
-
-        const client = new OpenAI({ apiKey: config.openaiApiKey });
-
         // Build commit list (sample for large PRs)
         const commitSample = stats.commits.length > 50
             ? [...stats.commits.slice(0, 25), ...stats.commits.slice(-25)]
@@ -1559,37 +1551,34 @@ JSON Format:
 
 OUTPUT ONLY JSON, nothing else!`;
 
-        const response = await client.chat.completions.create({
-            model: config.model || "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.8,
-            response_format: { type: "json_object" },
+        const schema = z.object({
+            sizeTitle: z.string().optional(),
+            sizeEmoji: z.string().optional(),
+            sizeDescription: z.string().optional(),
+            celebrationMessage: z.string().optional(),
+            primaryColor: z.string().optional(),
+            secondaryColor: z.string().optional(),
+            accentColor: z.string().optional(),
+            summary: z.string().optional(),
+            tagline: z.string().optional(),
         });
 
-        const content = response.choices[0]?.message?.content?.trim();
+        const parsed = await invokeStructured("celebrate", prompt, schema, { temperature: 0.8 });
+        const primaryColor = parsed.primaryColor;
+        const secondaryColor = parsed.secondaryColor;
+        const accentColor = parsed.accentColor;
 
-        if (content) {
-            try {
-                const parsed = JSON.parse(content) as Partial<AICelebrationContent>;
-
-                // Validate and merge with defaults
-                return {
-                    sizeTitle: parsed.sizeTitle || defaultContent.sizeTitle,
-                    sizeEmoji: parsed.sizeEmoji || defaultContent.sizeEmoji,
-                    sizeDescription: parsed.sizeDescription || defaultContent.sizeDescription,
-                    celebrationMessage: parsed.celebrationMessage || defaultContent.celebrationMessage,
-                    primaryColor: isValidHexColor(parsed.primaryColor) ? parsed.primaryColor! : defaultContent.primaryColor,
-                    secondaryColor: isValidHexColor(parsed.secondaryColor) ? parsed.secondaryColor! : defaultContent.secondaryColor,
-                    accentColor: isValidHexColor(parsed.accentColor) ? parsed.accentColor! : defaultContent.accentColor,
-                    summary: parsed.summary || defaultContent.summary,
-                    tagline: parsed.tagline || "",
-                };
-            } catch {
-                return defaultContent;
-            }
-        }
-
-        return defaultContent;
+        return {
+            sizeTitle: parsed.sizeTitle || defaultContent.sizeTitle,
+            sizeEmoji: parsed.sizeEmoji || defaultContent.sizeEmoji,
+            sizeDescription: parsed.sizeDescription || defaultContent.sizeDescription,
+            celebrationMessage: parsed.celebrationMessage || defaultContent.celebrationMessage,
+            primaryColor: primaryColor && isValidHexColor(primaryColor) ? primaryColor : defaultContent.primaryColor,
+            secondaryColor: secondaryColor && isValidHexColor(secondaryColor) ? secondaryColor : defaultContent.secondaryColor,
+            accentColor: accentColor && isValidHexColor(accentColor) ? accentColor : defaultContent.accentColor,
+            summary: parsed.summary || defaultContent.summary,
+            tagline: parsed.tagline || "",
+        };
     } catch {
         return defaultContent;
     }
@@ -1599,4 +1588,3 @@ function isValidHexColor(color: string | undefined): boolean {
     if (!color) return false;
     return /^#[0-9A-Fa-f]{6}$/.test(color);
 }
-

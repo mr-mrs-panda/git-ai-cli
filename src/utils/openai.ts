@@ -1,60 +1,22 @@
-import OpenAI from "openai";
-import { loadConfig } from "./config.ts";
+import { z } from "zod";
+import { invokeStructured, invokeText } from "./llm.ts";
 
-let openaiClient: OpenAI | null = null;
-let currentApiKey: string | null = null;
-
-/**
- * Initialize OpenAI client with API key from config
- */
-async function getOpenAIClient(): Promise<OpenAI> {
-  const config = await loadConfig();
-
-  if (!config.openaiApiKey) {
-    throw new Error(
-      "OpenAI API key not configured. Please run the tool to set up your API key."
-    );
-  }
-
-  // Reinitialize if API key changed
-  if (openaiClient && currentApiKey === config.openaiApiKey) {
-    return openaiClient;
-  }
-
-  currentApiKey = config.openaiApiKey;
-  openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
-  return openaiClient;
-}
-
-
-
-/**
- * Generate commit message from git changes
- */
 export async function generateCommitMessage(
   changes: Array<{ path: string; status: string; diff: string }>,
   branchName?: string,
   feedback?: string
 ): Promise<string> {
-  const config = await loadConfig();
-  const client = await getOpenAIClient();
-
   const changesText = changes
-    .map((change) => {
-      return `File: ${change.path} (${change.status})\n${change.diff}\n`;
-    })
+    .map((change) => `File: ${change.path} (${change.status})\n${change.diff}\n`)
     .join("\n---\n\n");
 
   const branchContext = branchName
     ? `\nBranch name: ${branchName}\nConsider the branch name context when writing the commit message.\n`
-    : '';
+    : "";
 
   const feedbackSection = feedback
-    ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
-${feedback}
-
-IMPORTANT: Address the user's feedback and regenerate the commit message accordingly.\n`
-    : '';
+    ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:\n${feedback}\n\nIMPORTANT: Address the user's feedback and regenerate the commit message accordingly.\n`
+    : "";
 
   const prompt = `You are an expert at writing meaningful git commit messages following Conventional Commits specification.
 
@@ -79,52 +41,19 @@ A commit message consists of three parts separated by blank lines:
    - Breaking changes: "BREAKING CHANGE: description"
    - Other metadata
 
-EXAMPLES:
-
-Simple commit (header only):
-fix(auth): correct typo in login validation
-
-Commit with body:
-feat(api): add user profile endpoint
-
-This endpoint allows clients to fetch user profile data including
-avatar, bio, and social links. It supports optional query parameters
-for filtering returned fields.
-
-Commit with body and footer:
-refactor(database): migrate from SQL to NoSQL
-
-The application now uses MongoDB instead of PostgreSQL to better handle
-unstructured user data and improve horizontal scaling capabilities.
-The migration maintains backward compatibility with existing data.
-
-BREAKING CHANGE: Database connection configuration format has changed
-Closes #234
-
 Git changes:
 ${changesText}${feedbackSection}
 
-IMPORTANT: Generate ONLY the commit message. If the changes are simple, a header-only commit is fine. For significant changes, include a body explaining why the change was needed.`;
+IMPORTANT: Generate ONLY the commit message.`;
 
-  const response = await client.chat.completions.create({
-    model: config.model || "gpt-5.2",
-    messages: [{ role: "user", content: prompt }],
-    temperature: config.temperature || 1,
-    reasoning_effort: config.reasoningEffort || "low",
-  });
-
-  const message = response.choices[0]?.message?.content?.trim();
-
-  if (!message) {
-    throw new Error("Failed to generate commit message");
-  }
-
-  return message;
+  return invokeText("commit", prompt);
 }
 
-/**
- * Generate PR title and description from branch info
- */
+const prSuggestionSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+});
+
 export async function generatePRSuggestion(
   branchName: string,
   commits: Array<{ message: string }>,
@@ -132,37 +61,20 @@ export async function generatePRSuggestion(
   feedback?: string,
   existingPR?: { title: string; body: string | null }
 ): Promise<{ title: string; description: string }> {
-  const config = await loadConfig();
-  const client = await getOpenAIClient();
-
   const commitsText = commits.map((c, i) => `${i + 1}. ${c.message}`).join("\n");
-
   const diffsText = diffs && diffs.length > 0
-    ? "\n\nCode Changes:\n" +
-    diffs.map((d, i) =>
-      `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`
-    ).join("\n")
+    ? "\n\nCode Changes:\n" + diffs.map((d, i) => `File ${i + 1}: ${d.path} (${d.status})\n${d.diff}\n---`).join("\n")
     : "";
 
   const existingPRSection = existingPR
-    ? `\n\nEXISTING PR CONTEXT (this PR already exists and will be updated):
-Current Title: ${existingPR.title}
-Current Description:
-${existingPR.body || "(no description)"}
-
-IMPORTANT: The above is the current PR state. Consider this context when generating the updated title and description. Include information about the new commits while maintaining the overall structure and theme.\n`
-    : '';
+    ? `\n\nEXISTING PR CONTEXT:\nCurrent Title: ${existingPR.title}\nCurrent Description:\n${existingPR.body || "(no description)"}`
+    : "";
 
   const feedbackSection = feedback
-    ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
-${feedback}
+    ? `\n\nUSER FEEDBACK:\n${feedback}\nAddress this feedback in the regenerated output.`
+    : "";
 
-IMPORTANT: Address the user's feedback and regenerate the PR title and description accordingly.\n`
-    : '';
-
-  const prompt = `You are an expert at writing clear, professional pull request titles and descriptions.
-
-Analyze the following information and generate a PR title and description.
+  const prompt = `Generate a professional pull request title and markdown description.
 
 Branch name: ${branchName}
 
@@ -170,145 +82,55 @@ Commits:
 ${commitsText}${diffsText}${existingPRSection}${feedbackSection}
 
 Rules:
-- Title should be clear, concise, and descriptive (max 72 characters)
-- Use commits to understand the high-level changes
-- Use code diffs (if provided) to understand implementation details and technical changes
-- Be professional and specific
-- Focus on WHY the change was made, not just WHAT changed
+- Title max 72 chars
+- Description must include sections: Summary, Changes
+- Optional Technical Notes only if needed
+- Focus on user impact and rationale
+- Return structured data`;
 
-Generate the response in the following format:
-TITLE: <your title here>
-
-DESCRIPTION:
-## Summary
-[1-2 sentences explaining what this PR does and why]
-
-## Changes
-- [Key change 1]
-- [Key change 2]
-- [Key change 3]
-[List the main changes as bullet points]
-
-## Technical Notes
-[Optional: Only include if there are breaking changes, API changes, new dependencies, or other important technical details. Otherwise omit this section entirely]
-
-IMPORTANT:
-- The description should be ready to use directly in GitHub - do NOT include labels like "PR Description:" or "Title:" in the description itself
-- Only include the markdown content for the description
-- Omit the "Technical Notes" section entirely if there are no breaking changes or important technical details`;
-
-  const response = await client.chat.completions.create({
-    model: config.model || "gpt-5.2",
-    messages: [{ role: "user", content: prompt }],
-    temperature: config.temperature || 1,
-    reasoning_effort: config.reasoningEffort || "low",
-  });
-
-  const content = response.choices[0]?.message?.content?.trim();
-
-  if (!content) {
-    throw new Error("Failed to generate PR suggestion");
-  }
-
-  // Parse the response
-  const titleMatch = content.match(/TITLE:\s*(.+?)(?:\n|$)/);
-  const descMatch = content.match(/DESCRIPTION:\s*([\s\S]+)$/);
-
-  const title = titleMatch?.[1]?.trim() || "Update";
-  const description = descMatch?.[1]?.trim() || content;
-
-  return { title, description };
+  return invokeStructured("pr", prompt, prSuggestionSchema);
 }
 
-/**
- * Generate branch name from git changes
- */
+const branchSchema = z.object({
+  type: z.enum(["feature", "bugfix", "chore", "refactor"]),
+  name: z.string().min(1),
+  description: z.string().min(1),
+});
+
 export async function generateBranchName(
   changes: Array<{ path: string; status: string; diff: string }>,
   feedback?: string
 ): Promise<{ name: string; type: "feature" | "bugfix" | "chore" | "refactor"; description: string }> {
-  const config = await loadConfig();
-  const client = await getOpenAIClient();
-
   const changesText = changes
-    .map((change) => {
-      return `File: ${change.path} (${change.status})\n${change.diff}\n`;
-    })
+    .map((change) => `File: ${change.path} (${change.status})\n${change.diff}\n`)
     .join("\n---\n\n");
 
   const feedbackSection = feedback
-    ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:
-${feedback}
+    ? `\n\nUSER FEEDBACK:\n${feedback}\nAddress this feedback.`
+    : "";
 
-IMPORTANT: Address the user's feedback and regenerate the branch name accordingly.\n`
-    : '';
-
-  const prompt = `You are an expert at analyzing code changes and creating descriptive git branch names.
-
-Analyze the following git changes and generate a branch name.
+  const prompt = `Analyze git changes and suggest a branch name.
 
 Rules:
-- Determine if this is a feature, bugfix, chore, or refactor
-- Use the format: <type>/<descriptive-name>
-- Types: feature, bugfix, chore, refactor
-- The descriptive name should be kebab-case (lowercase with hyphens)
-- Keep the branch name concise but descriptive (max 50 characters total)
-- Focus on what is being changed, not how
-- Be specific about the component/area being modified
+- Determine one type: feature|bugfix|chore|refactor
+- Name format: <type>/<kebab-case>
+- Keep concise (max 50 chars)
 
-Git changes:
-${changesText}${feedbackSection}
+Changes:
+${changesText}${feedbackSection}`;
 
-IMPORTANT: You MUST respond with ONLY these three lines, no other text:
-TYPE: <feature|bugfix|chore|refactor>
-NAME: <type>/<descriptive-name>
-DESCRIPTION: <one sentence description>`;
-
-  const response = await client.chat.completions.create({
-    model: config.model || "gpt-5.2",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 1, // Use fixed temperature for consistent output
-    reasoning_effort: "none", // Disable reasoning for faster, more predictable responses
+  const result = await invokeStructured("branch", prompt, branchSchema, {
+    reasoningEffort: "none",
+    temperature: 1,
   });
 
-  const content = response.choices[0]?.message?.content?.trim();
-
-  if (!content) {
-    throw new Error("Failed to generate branch name");
-  }
-
-
-  // Parse the response - try different patterns
-  let typeMatch = content.match(/TYPE:\s*(feature|bugfix|chore|refactor)/i);
-  let nameMatch = content.match(/NAME:\s*(.+?)(?:\n|$)/i);
-  let descMatch = content.match(/DESCRIPTION:\s*(.+?)$/is);
-
-  // If structured format fails, try to extract from free-form text
-  if (!typeMatch || !nameMatch) {
-    // Look for branch name pattern (type/name)
-    const branchPattern = content.match(/(feature|bugfix|chore|refactor)\/([a-z0-9-]+)/i);
-    if (branchPattern) {
-      const extractedType = branchPattern[1]?.toLowerCase();
-      const extractedName = branchPattern[0]; // full match like "feature/add-something"
-
-      return {
-        type: extractedType as "feature" | "bugfix" | "chore" | "refactor",
-        name: extractedName,
-        description: content.split('\n').find(line => line.length > 20)?.trim() || "Branch for code changes"
-      };
-    }
-  }
-
-  const type = (typeMatch?.[1]?.toLowerCase() as "feature" | "bugfix" | "chore" | "refactor") || "feature";
-  const name = nameMatch?.[1]?.trim() || `${type}/update`;
-  const description = descMatch?.[1]?.trim() || "Branch for code changes";
-
-  return { name, type, description };
+  return {
+    type: result.type,
+    name: result.name,
+    description: result.description,
+  };
 }
 
-/**
- * Commit group for multi-commit workflow
- */
 export interface CommitGroup {
   id: number;
   type: string;
@@ -317,201 +139,78 @@ export interface CommitGroup {
   reasoning: string;
   files: string[];
   dependencies: number[];
+  commitHeader: string;
+  commitBody?: string;
+  commitFooter?: string;
 }
 
-/**
- * Result of grouping analysis
- */
 export interface GroupingResult {
   groups: CommitGroup[];
   totalGroups: number;
 }
 
-/**
- * Analyze changes and group them into logical commits
- */
-export async function analyzeAndGroupChanges(
+const groupingSchema = z.object({
+  groups: z.array(z.object({
+    id: z.number().int().positive(),
+    type: z.string().min(1),
+    scope: z.string().optional(),
+    description: z.string().min(1),
+    reasoning: z.string().default(""),
+    files: z.array(z.string()).default([]),
+    dependencies: z.array(z.number().int().positive()).default([]),
+    commitHeader: z.string().min(1),
+    commitBody: z.string().optional(),
+    commitFooter: z.string().optional(),
+  })).min(1),
+  totalGroups: z.number().int().positive(),
+});
+
+export async function analyzeAndPlanGroupedCommits(
   changes: Array<{ path: string; status: string; diff: string }>,
   branchName?: string
 ): Promise<GroupingResult> {
-  const config = await loadConfig();
-  const client = await getOpenAIClient();
-
   const changesText = changes
-    .map((change, i) => {
-      return `File ${i + 1}: ${change.path} (${change.status})\n${change.diff}\n`;
-    })
+    .map((change, i) => `File ${i + 1}: ${change.path} (${change.status})\n${change.diff}\n`)
     .join("\n---\n\n");
 
   const branchContext = branchName
-    ? `Branch name: ${branchName}\nConsider the branch name context when grouping changes.\n\n`
-    : '';
+    ? `Branch name: ${branchName}\nConsider branch context while grouping.\n\n`
+    : "";
 
-  const prompt = `You are an expert at organizing git changes into logical, atomic commits following Conventional Commits specification.
+  const prompt = `Group these file changes into logical, atomic conventional commits.
 
-Analyze the following changes and group them into logical commits:
+${branchContext}
+Rules:
+- 1..10 groups
+- Keep feature, refactor, docs, test separated where meaningful
+- Include dependency ordering in dependencies
+- Every changed file should appear in at least one group
+- For every group provide a complete commit message plan:
+  - commitHeader: Conventional Commit header (<type>[optional scope]: <description>, max 72 chars)
+  - commitBody: optional body (explain why/what)
+  - commitFooter: optional footer (issues/breaking metadata)
+- commitHeader must be valid and specific for that group's files
 
-${branchContext}RULES:
-1. Create between 1 and 10 logical groups (use fewer if changes are related)
-2. Each group should be atomic and focused on a single purpose
-3. Use Conventional Commits types: feat, fix, refactor, chore, docs, test, perf, style
-4. Consider semantic relationships between files
-5. Respect module boundaries (e.g., services/*, commands/*, utils/*)
-6. Order groups so dependencies come before dependents (dependencies field lists IDs of groups that must be committed first)
-7. If all changes are closely related, create just 1 group (don't artificially split)
+Changes:
+${changesText}`;
 
-GROUPING STRATEGY:
-- Group files that implement the same feature together
-- Separate different types of changes (feat vs test vs docs)
-- Keep refactoring separate from new features
-- Put tests with their corresponding implementation if tightly coupled, or separate if standalone
+  const result = await invokeStructured("commit", prompt, groupingSchema);
+  const groups = result.groups.slice(0, 10).map((g, idx) => ({
+    id: g.id || idx + 1,
+    type: g.type,
+    scope: g.scope,
+    description: g.description,
+    reasoning: g.reasoning,
+    files: g.files,
+    dependencies: g.dependencies,
+    commitHeader: g.commitHeader,
+    commitBody: g.commitBody,
+    commitFooter: g.commitFooter,
+  }));
 
-FILES TO ANALYZE:
-${changesText}
-
-RESPOND WITH VALID JSON ONLY:
-{
-  "groups": [
-    {
-      "id": 1,
-      "type": "feat",
-      "scope": "auth",
-      "description": "Add JWT authentication",
-      "reasoning": "Core authentication implementation with token handling",
-      "files": ["src/services/auth.ts", "src/utils/jwt.ts"],
-      "dependencies": []
-    },
-    {
-      "id": 2,
-      "type": "test",
-      "scope": "auth",
-      "description": "Add authentication tests",
-      "reasoning": "Test coverage for JWT authentication",
-      "files": ["src/services/auth.test.ts"],
-      "dependencies": [1]
-    }
-  ],
-  "totalGroups": 2
+  return { groups, totalGroups: groups.length };
 }
 
-IMPORTANT:
-- If changes belong to a single logical commit, create only 1 group
-- Maximum 10 groups
-- Scope is optional (omit if not applicable)
-- Dependencies should reference group IDs that must be committed first`;
-
-  const response = await client.chat.completions.create({
-    model: config.model || "gpt-5.2",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 1,
-    reasoning_effort: config.reasoningEffort || "low", // Better analysis for grouping
-    response_format: { type: "json_object" },
-  });
-
-  const content = response.choices[0]?.message?.content?.trim();
-
-  if (!content) {
-    throw new Error("Failed to analyze and group changes");
-  }
-
-  try {
-    const result = JSON.parse(content);
-    const groups = result.groups || [];
-
-    // Validate groups
-    if (!Array.isArray(groups) || groups.length === 0) {
-      throw new Error("No groups returned");
-    }
-
-    // If more than 10 groups, we need to consolidate
-    if (groups.length > 10) {
-      return await consolidateGroups(groups, branchName);
-    }
-
-    return {
-      groups: groups.map((g: any) => ({
-        id: g.id || 0,
-        type: g.type || "chore",
-        scope: g.scope,
-        description: g.description || "Update",
-        reasoning: g.reasoning || "",
-        files: g.files || [],
-        dependencies: g.dependencies || [],
-      })),
-      totalGroups: groups.length,
-    };
-  } catch (error) {
-    console.error("Failed to parse grouping result:", content);
-    throw new Error("Failed to parse grouping result");
-  }
-}
-
-/**
- * Consolidate groups when AI suggests more than 10
- */
-async function consolidateGroups(
-  groups: any[],
-  branchName?: string
-): Promise<GroupingResult> {
-  const config = await loadConfig();
-  const client = await getOpenAIClient();
-
-  const groupsText = groups
-    .map((g, i) => `Group ${i + 1}: ${g.type}${g.scope ? `(${g.scope})` : ""} - ${g.description}\nFiles: ${g.files?.join(", ") || ""}`)
-    .join("\n\n");
-
-  const prompt = `You previously created ${groups.length} commit groups, but that's too many. Consolidate them into maximum 10 logical groups.
-
-Original groups:
-${groupsText}
-
-RULES:
-1. Merge related groups together
-2. Maximum 10 groups
-3. Keep the same JSON format
-4. Maintain logical separation between different types of changes
-
-RESPOND WITH VALID JSON ONLY (same format as before).`;
-
-  const response = await client.chat.completions.create({
-    model: config.model || "gpt-5.2",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 1,
-    reasoning_effort: config.reasoningEffort || "low",
-    response_format: { type: "json_object" },
-  });
-
-  const content = response.choices[0]?.message?.content?.trim();
-
-  if (!content) {
-    throw new Error("Failed to consolidate groups");
-  }
-
-  try {
-    const result = JSON.parse(content);
-    const consolidatedGroups = result.groups || [];
-
-    return {
-      groups: consolidatedGroups.slice(0, 10).map((g: any) => ({
-        id: g.id || 0,
-        type: g.type || "chore",
-        scope: g.scope,
-        description: g.description || "Update",
-        reasoning: g.reasoning || "",
-        files: g.files || [],
-        dependencies: g.dependencies || [],
-      })),
-      totalGroups: Math.min(consolidatedGroups.length, 10),
-    };
-  } catch (error) {
-    console.error("Failed to parse consolidated groups:", content);
-    throw new Error("Failed to parse consolidated groups");
-  }
-}
-
-/**
- * PR information for release analysis
- */
 export interface PRInfo {
   number: number;
   title: string;
@@ -520,177 +219,60 @@ export interface PRInfo {
   mergedAt: string;
 }
 
-/**
- * Suggest version bump type based on commits and optionally PRs
- */
+const versionBumpSchema = z.object({
+  type: z.enum(["major", "minor", "patch"]),
+  reason: z.string().min(1),
+});
+
 export async function suggestVersionBump(
   commits: Array<{ message: string }>,
   pullRequests?: PRInfo[]
 ): Promise<{ type: "major" | "minor" | "patch"; reason: string }> {
-  const config = await loadConfig();
-  const client = await getOpenAIClient();
-
   const commitsText = commits.map((c) => `- ${c.message}`).join("\n");
+  const prsText = pullRequests && pullRequests.length > 0
+    ? `\n\nPRs:\n${pullRequests.map((pr) => `- #${pr.number}: ${pr.title} [${pr.labels.join(", ")}]`).join("\n")}`
+    : "";
 
-  let prsText = "";
-  let labelsHint = "";
-
-  if (pullRequests && pullRequests.length > 0) {
-    prsText = `\n\nPull Requests merged since last release:\n${pullRequests
-      .map((pr) => {
-        let prLine = `- #${pr.number}: ${pr.title}`;
-        if (pr.labels.length > 0) {
-          prLine += ` [${pr.labels.join(", ")}]`;
-        }
-        return prLine;
-      })
-      .join("\n")}`;
-
-    // Check for significant labels
-    const allLabels = pullRequests.flatMap((pr) => pr.labels.map((l) => l.toLowerCase()));
-    if (allLabels.some((l) => l.includes("breaking") || l.includes("major"))) {
-      labelsHint = "\n\nNote: Some PRs have 'breaking' or 'major' labels - consider a MAJOR bump.";
-    } else if (allLabels.some((l) => l.includes("enhancement") || l.includes("feature"))) {
-      labelsHint = "\n\nNote: Some PRs have 'enhancement' or 'feature' labels - consider at least a MINOR bump.";
-    }
-  }
-
-  const prompt = `You are an expert at semantic versioning (semver). Analyze the following commits${pullRequests && pullRequests.length > 0 ? " and pull requests" : ""} and suggest the appropriate version bump type.
+  const prompt = `Suggest semantic version bump based on the changelog.
 
 Commits:
-${commitsText}${prsText}${labelsHint}
+${commitsText}${prsText}
 
-Semver Rules:
-- MAJOR (x.0.0): Breaking changes, incompatible API changes, major refactors that break existing functionality
-- MINOR (0.x.0): New features, backwards-compatible functionality additions
-- PATCH (0.0.x): Bug fixes, small improvements, documentation updates, chores
+Semver policy:
+- major: breaking changes
+- minor: new features
+- patch: fixes/chore/docs`;
 
-Keywords to look for:
-- MAJOR: "BREAKING CHANGE", "breaking:", major refactor, API changes, remove deprecated features
-- MINOR: "feat:", "feature:", new functionality, new endpoints, new commands
-- PATCH: "fix:", "bugfix:", "chore:", "docs:", "style:", "refactor:" (non-breaking), "test:"
-
-Analyze the commits${pullRequests && pullRequests.length > 0 ? " and PR information" : ""} and determine the highest priority version bump needed.
-
-RESPOND WITH VALID JSON ONLY:
-{
-  "type": "major" | "minor" | "patch",
-  "reason": "Brief explanation why this version bump is appropriate"
-}`;
-
-  const response = await client.chat.completions.create({
-    model: config.model || "gpt-5.2",
-    messages: [{ role: "user", content: prompt }],
+  return invokeStructured("release", prompt, versionBumpSchema, {
+    reasoningEffort: "none",
     temperature: 0.3,
-    reasoning_effort: "none",
-    response_format: { type: "json_object" },
   });
-
-  const content = response.choices[0]?.message?.content?.trim();
-
-  if (!content) {
-    throw new Error("Failed to suggest version bump");
-  }
-
-  try {
-    const result = JSON.parse(content);
-    const type = result.type;
-    const reason = result.reason || "No reason provided";
-
-    // Validate type
-    if (!["major", "minor", "patch"].includes(type)) {
-      return { type: "patch", reason: "Could not determine version bump type" };
-    }
-
-    return { type, reason };
-  } catch (error) {
-    console.error("Failed to parse version bump suggestion:", content);
-    return { type: "patch", reason: "Could not determine version bump type" };
-  }
 }
 
-/**
- * Generate release notes from commits and optionally PRs
- */
+const releaseNotesSchema = z.object({
+  title: z.string().min(1),
+  notes: z.string().min(1),
+});
+
 export async function generateReleaseNotes(
   version: string,
   commits: Array<{ message: string; author: string; date: string }>,
   pullRequests?: PRInfo[]
 ): Promise<{ title: string; notes: string }> {
-  const config = await loadConfig();
-  const client = await getOpenAIClient();
+  const commitsText = commits.map((c) => `- ${c.message} (by ${c.author})`).join("\n");
 
-  const commitsText = commits
-    .map((c) => `- ${c.message} (by ${c.author})`)
-    .join("\n");
+  const prsText = pullRequests && pullRequests.length > 0
+    ? `\n\nPull Requests:\n${pullRequests.map((pr) => `- #${pr.number}: ${pr.title}${pr.body ? `\n  ${pr.body.slice(0, 500)}` : ""}`).join("\n")}`
+    : "";
 
-  let prsText = "";
-  if (pullRequests && pullRequests.length > 0) {
-    prsText = `\n\nPull Requests merged since last release:\n${pullRequests
-      .map((pr) => {
-        let prEntry = `- #${pr.number}: ${pr.title}`;
-        if (pr.labels.length > 0) {
-          prEntry += ` [${pr.labels.join(", ")}]`;
-        }
-        if (pr.body) {
-          // Truncate long PR bodies
-          const truncatedBody = pr.body.length > 500
-            ? pr.body.substring(0, 500) + "..."
-            : pr.body;
-          prEntry += `\n  Description: ${truncatedBody.replace(/\n/g, "\n  ")}`;
-        }
-        return prEntry;
-      })
-      .join("\n\n")}`;
-  }
+  const prompt = `Create release notes for version ${version}.
 
-  const prompt = `You are an expert at writing clear, professional release notes.
-
-Analyze the following commits${pullRequests && pullRequests.length > 0 ? " and pull requests" : ""} and generate release notes for version ${version}.
-
-Commits since last release:
+Commits:
 ${commitsText}${prsText}
 
-Rules:
-- Title should be the version number with a brief theme (e.g., "v1.2.0 - Performance Improvements")
-- Notes should be organized by category:
-  * 🚀 Features (new functionality)
-  * 🐛 Bug Fixes (fixes and corrections)
-  * 🔧 Changes (refactoring, updates, improvements)
-  * 📚 Documentation (docs changes)
-  * 🧹 Chores (maintenance, dependencies)
-- Use bullet points for each change
-- Be concise and clear
-- Use markdown formatting
-- Focus on user-facing changes
-- Group related changes together
-${pullRequests && pullRequests.length > 0 ? "- Use PR titles and descriptions for better context on changes\n- Reference PR numbers where relevant (e.g., #123)" : ""}
+Format requirements:
+- title: short release title
+- notes: markdown with sections for Features, Bug Fixes, Changes, Docs, Chores where applicable`;
 
-Generate the response in the following format:
-TITLE: <version theme here>
-
-NOTES:
-<your release notes here in markdown>`;
-
-  const response = await client.chat.completions.create({
-    model: config.model || "gpt-5.2",
-    messages: [{ role: "user", content: prompt }],
-    temperature: config.temperature || 1,
-    reasoning_effort: config.reasoningEffort || "low",
-  });
-
-  const content = response.choices[0]?.message?.content?.trim();
-
-  if (!content) {
-    throw new Error("Failed to generate release notes");
-  }
-
-  // Parse the response
-  const titleMatch = content.match(/TITLE:\s*(.+?)(?:\n|$)/);
-  const notesMatch = content.match(/NOTES:\s*([\s\S]+)$/);
-
-  const title = titleMatch?.[1]?.trim() || version;
-  const notes = notesMatch?.[1]?.trim() || content;
-
-  return { title, notes };
+  return invokeStructured("release", prompt, releaseNotesSchema);
 }

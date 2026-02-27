@@ -30,6 +30,7 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - Works with all changes: staged, unstaged, and untracked files
   - Automatically skips large files (>100KB) and migration files
   - Uses conventional commit format
+  - Grouped mode uses a single AI planning call (groups + per-group messages) for faster execution
   - Interactive TUI for confirming generated messages
   - Optional automatic push to origin
   - Perfect for IDEs like Rider that don't work with git staging
@@ -104,7 +105,12 @@ Then run the tool:
 git-ai
 ```
 
-**On first run**, you'll be prompted to enter your OpenAI API key. The tool will save it to `~/.config/git-ai/config.json` for future use.
+**On first run**, you'll be guided through LLM setup:
+- Choose provider (OpenAI, Gemini, Anthropic, Ollama, or Custom OpenAI-compatible)
+- Enter and save API key locally (optional for Ollama/custom endpoints)
+- Load available models live from the provider API (or local Ollama)
+- Fallback to manual model ID entry if discovery is unavailable
+- Select your default model
 
 ## Configuration
 
@@ -112,11 +118,20 @@ Configuration is stored in `~/.config/git-ai/config.json`:
 
 ```json
 {
-  "openaiApiKey": "sk-your-api-key-here",
   "githubToken": "ghp-your-github-token-here",
-  "model": "gpt-5.2",
-  "temperature": 1,
-  "reasoningEffort": "low",
+  "llm": {
+    "defaultProfile": "smart-main",
+    "profiles": {
+      "smart-main": {
+        "provider": "openai",
+        "model": "provider-model-id",
+        "temperature": 0.7,
+        "reasoningEffort": "low",
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKeyEnv": "OPENAI_API_KEY"
+      }
+    }
+  },
   "preferences": {
     "commit": {
       "alwaysStageAll": true,
@@ -148,42 +163,42 @@ Use the settings command for easy configuration:
 git-ai settings
 ```
 
-This allows you to:
-- Change AI model (GPT-5.2, GPT-5.2 Pro, GPT-5.1, o3, etc.)
+`git-ai settings` now includes:
+- One dedicated **LLM Setup Wizard** (provider/model/key/base URL/reasoning/temperature in one flow)
+- Separate individual setting points for commit/PR/GitHub options
+
+It allows you to:
+- Discover and select available provider models live (OpenAI, Gemini, Anthropic, Ollama, custom OpenAI-compatible)
 - Adjust reasoning effort (none, low, medium, high, xhigh)
 - Update temperature
 - Configure commit behavior (grouped/single, always stage all, `commit -y` auto-push)
 - Configure pull request behavior (draft by default or not)
-- Change your API key
+- Configure provider key env vars and optional local key storage
 - Reset to defaults
 
 ### Configuration Options
 
 | Option | Description | Default | Range/Options |
 |--------|-------------|---------|---------------|
-| `model` | AI model to use | `gpt-5.2` | See available models below |
-| `reasoningEffort` | Reasoning depth | `low` | `none`, `low`, `medium`, `high`, `xhigh` |
-| `temperature` | Creativity vs consistency | `1` | `0.0` - `2.0` |
+| `llm.defaultProfile` | Active LLM profile | `smart-main` | profile name |
+| `llm.profiles.<name>.model` | Selected model ID | none (must be selected) | live-discovered from provider |
+| `llm.profiles.<name>.reasoningEffort` | Reasoning depth | `low` | `none`, `low`, `medium`, `high`, `xhigh` |
+| `llm.profiles.<name>.temperature` | Creativity vs consistency | `0.7` | `0.0` - `2.0` |
 | `preferences.commit.defaultMode` | Default commit mode | `grouped` | `grouped`, `single` |
 | `preferences.commit.alwaysStageAll` | Always stage all changes before commit | `true` | `true`, `false` |
 | `preferences.commit.autoPushOnYes` | Auto-push on `commit -y` / `auto -y` | `false` | `true`, `false` |
 | `preferences.pullRequest.createAsDraft` | Create PRs as draft by default | `true` | `true`, `false` |
-| `openaiApiKey` | Your OpenAI API key | - | `sk-...` |
+| `llm.profiles.<name>.provider` | Provider for profile | `openai` | `openai`, `gemini`, `anthropic`, `ollama`, `custom-openai-compatible` |
+| `llm.profiles.<name>.apiKeyEnv` | Environment variable to read key from | provider-specific | e.g. `OPENAI_API_KEY` |
+| `llm.profiles.<name>.apiKey` | Optional local stored key | - | provider API key (or empty for local/custom setups) |
 | `githubToken` | GitHub token for PR/release features | - | `ghp-...` or `GITHUB_TOKEN` env var |
 
 ### Available Models
 
-| Model | Reasoning Levels | Best For |
-|-------|-----------------|----------|
-| `gpt-5.2` | none, low, medium, high | General purpose, fast on 'none', deep on 'high' |
-| `gpt-5.2-chat` | none, low, medium, high | Optimized for conversations |
-| `gpt-5.2-pro` | high, xhigh | Complex tasks, maximum reasoning |
-| `gpt-5.1` | none, low, medium, high | Previous generation |
-| `gpt-5.1-codex` | none, low, medium, high | Optimized for code |
-| `gpt-5-mini` | low, medium | Cost-effective, lighter |
-| `gpt-5-nano` | low, medium | Very lightweight |
-| `o3` | low, medium, high | Previous generation reasoning |
-| `o3-mini` | low, medium, high | Lighter o3 variant |
+Models are loaded dynamically from provider APIs during setup/settings.
+No model IDs are hardcoded anymore.
+Note: Some models/providers may not support every tuning parameter (e.g. `temperature`).
+`git-ai` falls back to provider/model defaults when unsupported.
 
 ### Reasoning Effort Levels
 
@@ -191,7 +206,7 @@ This allows you to:
 - **low**: Minimal reasoning (balanced speed and quality)
 - **medium**: Moderate reasoning depth
 - **high**: Deep reasoning (slower, more thorough)
-- **xhigh**: Maximum reasoning (GPT-5.2 Pro only)
+- **xhigh**: Maximum reasoning (provider/model support dependent)
 
 You can also edit the config file directly with your favorite editor.
 
@@ -209,7 +224,7 @@ bun install
 bun run src/cli.ts
 ```
 
-3. You'll be prompted for your OpenAI API key on first run
+3. You'll be guided through provider + model selection on first run
 
 ## Usage
 
@@ -478,7 +493,7 @@ bun run build
 
 - Bun v1.3.4 or higher
 - Git repository
-- OpenAI API key
+- One provider API key (OpenAI, Gemini, or Anthropic)
 
 ## File Size Limits
 
@@ -506,7 +521,10 @@ The uninstaller will:
 ## Technology Stack
 
 - [Bun](https://bun.sh) - Fast JavaScript runtime
-- [OpenAI API](https://platform.openai.com/) - OpenAI API for AI generation
+- [LangChain](https://js.langchain.com/) - Unified multi-provider LLM orchestration
+- [OpenAI API](https://platform.openai.com/)
+- [Google Gemini API](https://ai.google.dev/)
+- [Anthropic API](https://docs.anthropic.com/)
 - [@clack/prompts](https://github.com/natemoo-re/clack) - Modern CLI prompts
 - TypeScript - Type-safe development
 
