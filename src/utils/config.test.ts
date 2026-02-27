@@ -36,6 +36,10 @@ describe("Config", () => {
       expect(config.model).toBe("gpt-5.2");
       expect(config.temperature).toBe(1);
       expect(config.reasoningEffort).toBe("low");
+      expect(config.preferences?.commit.defaultMode).toBe("grouped");
+      expect(config.preferences?.commit.alwaysStageAll).toBe(true);
+      expect(config.preferences?.commit.autoPushOnYes).toBe(false);
+      expect(config.preferences?.pullRequest.createAsDraft).toBe(true);
     });
 
     test("should merge loaded config with defaults", async () => {
@@ -45,7 +49,21 @@ describe("Config", () => {
       // We can't easily test loadConfig with custom path,
       // so we test the merge logic conceptually
       const partialConfig = { openaiApiKey: "sk-test123" };
-      const defaults = { model: "gpt-5.2", temperature: 1, reasoningEffort: "low" };
+      const defaults = {
+        model: "gpt-5.2",
+        temperature: 1,
+        reasoningEffort: "low",
+        preferences: {
+          commit: {
+            alwaysStageAll: true,
+            defaultMode: "grouped",
+            autoPushOnYes: false,
+          },
+          pullRequest: {
+            createAsDraft: true,
+          },
+        },
+      };
       const merged = { ...defaults, ...partialConfig };
 
       expect(merged.openaiApiKey).toBe("sk-test123");
@@ -83,4 +101,3 @@ describe("Config", () => {
     });
   });
 });
-
