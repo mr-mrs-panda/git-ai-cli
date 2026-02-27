@@ -1110,14 +1110,14 @@ export async function generatePRCelebrateHTML(
 </head>
 <body>
   <div class="hero">
-    <p class="pr-number">${stats.repoOwner}/${stats.repoName}</p>
+    <p class="pr-number">${escapeHtml(stats.repoOwner)}/${escapeHtml(stats.repoName)}</p>
     <h1>🎊 ${t("prCelebration", language)}</h1>
     ${aiContent.tagline ? `<p class="tagline">"${escapeHtml(aiContent.tagline)}"</p>` : ""}
     <p class="pr-title">#${stats.prNumber}: ${escapeHtml(stats.prTitle)}</p>
     <div class="pr-meta">
       <span class="pr-meta-item">📅 ${formatDate(stats.createdAt)}</span>
-      <span class="pr-meta-item">👤 ${stats.authors[0]?.name ?? "Unknown"}</span>
-      <span class="pr-meta-item">🌿 ${stats.branchName} → ${stats.baseBranch}</span>
+      <span class="pr-meta-item">👤 ${escapeHtml(stats.authors[0]?.name ?? "Unknown")}</span>
+      <span class="pr-meta-item">🌿 ${escapeHtml(stats.branchName)} → ${escapeHtml(stats.baseBranch)}</span>
     </div>
     <span class="state-badge">${stateText.toUpperCase()}</span>
     ${stats.labels.length > 0 ? `
