@@ -11,7 +11,7 @@ import {
 } from "../utils/git.ts";
 import {
   generateCommitMessage,
-  analyzeAndGroupChanges,
+  analyzeAndPlanGroupedCommits,
   type CommitGroup,
 } from "../utils/openai.ts";
 import { Spinner, type ClackSpinner } from "../utils/ui.ts";
@@ -134,7 +134,7 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
     // Analyze and group ALL changes (including large files) with AI
     // Large files are committed but their content is not sent to AI for analysis
     spinner.start("Grouping changes with AI...");
-    const groupingResult = await analyzeAndGroupChanges(
+    const groupingResult = await analyzeAndPlanGroupedCommits(
       changes.map((c) => ({
         path: c.path,
         status: c.status,
@@ -249,7 +249,6 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
           group,
           includedChanges,
           skippedChanges,
-          currentBranch,
           i,
           sortedGroups.length,
           spinner,
@@ -580,7 +579,6 @@ async function commitGroup(
   group: CommitGroup,
   allChanges: GitFileChange[],
   skippedChanges: GitFileChange[],
-  branchName: string,
   groupIndex: number,
   totalGroups: number,
   spinner: Spinner,
@@ -603,16 +601,9 @@ async function commitGroup(
     return null;
   }
 
-  // Generate commit message for this group
+  // Create commit message from planned grouped output (single AI planning call path)
   spinner.start(`Creating commit ${groupIndex + 1} of ${totalGroups}...`);
-  const commitMessage = await generateCommitMessage(
-    groupChanges.map((c) => ({
-      path: c.path,
-      status: c.status,
-      diff: c.diff,
-    })),
-    branchName
-  );
+  const commitMessage = buildCommitMessageFromPlan(group);
 
   // Create commit
   const tmpFile = `/tmp/git-ai-commit-group-${group.id}-${Date.now()}.txt`;
@@ -652,4 +643,21 @@ async function commitGroup(
       // Ignore cleanup errors
     }
   }
+}
+
+function buildCommitMessageFromPlan(group: CommitGroup): string {
+  const rawHeader = (group.commitHeader || "").trim();
+  const validHeader = /^[a-z]+(?:\([^)]+\))?:\s.+/.test(rawHeader) && rawHeader.length <= 72;
+
+  const header = validHeader
+    ? rawHeader
+    : `${group.type}${group.scope ? `(${group.scope})` : ""}: ${group.description}`.trim();
+
+  const body = (group.commitBody || "").trim();
+  const footer = (group.commitFooter || "").trim();
+
+  const parts = [header];
+  if (body) parts.push(body);
+  if (footer) parts.push(footer);
+  return parts.join("\n\n");
 }

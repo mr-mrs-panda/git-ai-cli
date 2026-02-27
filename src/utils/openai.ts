@@ -139,6 +139,9 @@ export interface CommitGroup {
   reasoning: string;
   files: string[];
   dependencies: number[];
+  commitHeader: string;
+  commitBody?: string;
+  commitFooter?: string;
 }
 
 export interface GroupingResult {
@@ -155,11 +158,14 @@ const groupingSchema = z.object({
     reasoning: z.string().default(""),
     files: z.array(z.string()).default([]),
     dependencies: z.array(z.number().int().positive()).default([]),
+    commitHeader: z.string().min(1),
+    commitBody: z.string().optional(),
+    commitFooter: z.string().optional(),
   })).min(1),
   totalGroups: z.number().int().positive(),
 });
 
-export async function analyzeAndGroupChanges(
+export async function analyzeAndPlanGroupedCommits(
   changes: Array<{ path: string; status: string; diff: string }>,
   branchName?: string
 ): Promise<GroupingResult> {
@@ -179,6 +185,11 @@ Rules:
 - Keep feature, refactor, docs, test separated where meaningful
 - Include dependency ordering in dependencies
 - Every changed file should appear in at least one group
+- For every group provide a complete commit message plan:
+  - commitHeader: Conventional Commit header (<type>[optional scope]: <description>, max 72 chars)
+  - commitBody: optional body (explain why/what)
+  - commitFooter: optional footer (issues/breaking metadata)
+- commitHeader must be valid and specific for that group's files
 
 Changes:
 ${changesText}`;
@@ -192,6 +203,9 @@ ${changesText}`;
     reasoning: g.reasoning,
     files: g.files,
     dependencies: g.dependencies,
+    commitHeader: g.commitHeader,
+    commitBody: g.commitBody,
+    commitFooter: g.commitFooter,
   }));
 
   return { groups, totalGroups: groups.length };
