@@ -1,10 +1,21 @@
 import * as p from "@clack/prompts";
-import { isGitRepository, getCurrentBranch, getBaseBranch, hasUnstagedChanges, stageAllChanges, switchToBranch, pullBranch, fetchOrigin } from "../utils/git.ts";
+import {
+  isGitRepository,
+  getCurrentBranch,
+  getBaseBranch,
+  hasUnstagedChanges,
+  switchToBranch,
+  pullBranch,
+  fetchOrigin,
+  getBranchInfo,
+  pushToOrigin,
+  isBranchPushed,
+  isGitHubRepository,
+  prExistsForBranch,
+} from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
-import { getBranchInfo, pushToOrigin, isBranchPushed, isGitHubRepository, prExistsForBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
-import { getGitHubToken, updateConfig } from "../utils/config.ts";
-import { parseGitHubRepo } from "../utils/git.ts";
+import { getGitHubToken, loadConfig } from "../utils/config.ts";
 import { Octokit } from "octokit";
 import { Spinner } from "../utils/ui.ts";
 
@@ -251,7 +262,8 @@ async function createPullRequest(
   baseBranch: string,
   spinner: Spinner,
   autoYes: boolean,
-  yolo: boolean = false
+  yolo: boolean = false,
+  draft: boolean = true
 ): Promise<{ prNumber?: number; owner?: string; repo?: string }> {
   // Get branch info for PR
   spinner.start("Analyzing commits for PR...");
@@ -321,6 +333,7 @@ async function createPullRequest(
     repo,
     githubToken,
     autoYes,
+    draft,
   });
 
   if (!prResult) {
@@ -346,6 +359,15 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   const effectiveYolo = release || yolo;
   const effectiveAutoYes = autoYes; // Only explicit --yes flag enables autoYes
   const spinner = new Spinner();
+  const config = await loadConfig();
+  const preferences = config.preferences;
+  const commitPreferences = preferences?.commit;
+  const prPreferences = preferences?.pullRequest;
+
+  const singleCommit = (commitPreferences?.defaultMode ?? "grouped") === "single";
+  const alwaysStageAll = commitPreferences?.alwaysStageAll ?? true;
+  const autoPushOnYes = commitPreferences?.autoPushOnYes ?? false;
+  const createDraftPR = prPreferences?.createAsDraft ?? true;
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -419,7 +441,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
         if (shouldCreatePR) {
           // Jump directly to PR creation
           p.log.step("Creating Pull Request");
-          const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo);
+          const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo, createDraftPR);
 
           // If yolo mode, merge the PR and delete the branch
           if (effectiveYolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
@@ -479,6 +501,8 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   const commitMessage = await generateAndCommit({
     confirmBeforeCommit: !effectiveAutoYes,
     autoYes: effectiveAutoYes,
+    singleCommit,
+    alwaysStageAll,
   });
 
   if (!commitMessage) {
@@ -493,7 +517,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   const isPushed = await isBranchPushed();
 
   if (!isPushed) {
-    let shouldPush = effectiveAutoYes;
+    let shouldPush = effectiveAutoYes ? autoPushOnYes : false;
 
     if (!effectiveAutoYes) {
       const response = await p.confirm({
@@ -509,7 +533,11 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
       shouldPush = response;
     } else {
-      p.log.info("Auto-accepting: Pushing branch to origin");
+      p.log.info(
+        shouldPush
+          ? "Auto-accepting: Pushing branch to origin (settings)"
+          : "Auto-accepting: Skipping push (settings)"
+      );
     }
 
     if (shouldPush) {
@@ -567,7 +595,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   }
 
   // Use the helper function to create the PR
-  const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo);
+  const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo, createDraftPR);
 
   // If yolo mode, merge the PR and delete the branch
   if (effectiveYolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
