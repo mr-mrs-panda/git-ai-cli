@@ -8,6 +8,12 @@ AI-powered Git workflow assistant built with Bun.
 
 [demo.webm](https://github.com/user-attachments/assets/84d26b0c-3c78-45eb-8e0e-5fef7b0b7a44)
 
+## AI Generation Notice
+
+Large parts of this repository were generated with AI assistance, primarily using Claude Code, GitHub Copilot, and Codex.
+
+I am aware that AI-generated code can be risky or incorrect in subtle ways. I have done my best to review every single line of code in this repository before shipping changes.
+
 ## Quick Start
 
 Install:
