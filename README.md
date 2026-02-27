@@ -4,534 +4,80 @@
 [![Release](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/release.yml/badge.svg)](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-AI-powered Git commit message generator and PR suggestion tool built with Bun.
+AI-powered Git workflow assistant built with Bun.
 
 [demo.webm](https://github.com/user-attachments/assets/84d26b0c-3c78-45eb-8e0e-5fef7b0b7a44)
 
-## Features
+## Quick Start
 
-- **🚀 Auto Mode**: Intelligent end-to-end workflow for quick changes
-  - Analyzes your current state and determines what needs to be done
-  - If on main/master: creates a new branch based on your changes
-  - Stages and commits changes with AI-generated message
-  - Pushes to origin
-  - Creates GitHub Pull Request automatically
-  - YOLO mode: auto-merge PR and delete branch after merge
-  - Perfect for quick fixes and features
-
-- **📋 Prepare Command**: Smart workflow to prepare for a new feature
-  - Handles uncommitted changes intelligently (commit, stash, or discard)
-  - Automatically checks out to main/master
-  - Pulls latest changes from remote
-  - If you chose stash: reapplies changes on main so you can work fresh
-  - Perfect before starting a new feature branch
-
-- **Commit Generator**: Analyzes all your changes and generates meaningful commit messages using AI
-  - Works with all changes: staged, unstaged, and untracked files
-  - Automatically skips large files (>100KB) and migration files
-  - Uses conventional commit format
-  - Grouped mode uses a single AI planning call (groups + per-group messages) for faster execution
-  - Interactive TUI for confirming generated messages
-  - Optional automatic push to origin
-  - Perfect for IDEs like Rider that don't work with git staging
-
-- **Branch Creator**: Analyzes all your changes and suggests appropriate branch names
-  - Works with all changes: staged, unstaged, and untracked files
-  - AI-powered branch name generation
-  - Automatically determines branch type (feature/bugfix/chore/refactor)
-  - Creates and switches to the new branch
-  - Perfect for analyzing all your work regardless of staging status
-
-- **PR Generator**: Generates pull request titles and descriptions based on:
-  - Branch name
-  - Commit messages
-  - Branch comparison with base branch
-  - Copy to clipboard functionality
-  - Direct GitHub PR creation with token management
-
-- **Release Creator**: Automates GitHub releases with AI
-  - Analyzes commits since last release
-  - Fetches merged PR titles and descriptions for richer context
-  - Determines semantic version bump (major/minor/patch) using commits and PR labels
-  - Generates comprehensive release notes with PR references
-  - Automatically switches to main/master and pulls latest changes
-  - Creates GitHub release with changelog
-  - Tags the release automatically
-
-- **Branch Cleanup**: Clean up merged branches
-  - Finds local branches merged into remote
-  - Safe deletion with confirmation
-  - Prevents deletion of current branch and protected branches
-  - Keeps your repository organized
-
-- **Stage Assistant**: Interactively stage and unstage files
-  - Shows staged and unstaged files in one TUI
-  - Pre-selects already staged files
-  - Lets you stage and unstage in one pass
-  - Great before commit generation
-
-- **Git Unwrapped**: Spotify Wrapped style yearly repository report
-  - Analyzes the last 365 days of activity
-  - Generates a rich HTML report and opens it in your browser
-  - Supports English and German output
-
-- **PR Celebrate**: Fancy report for your current pull request
-  - Collects PR stats (files, commits, lines, contributors)
-  - Generates a visual HTML celebration page
-  - Supports English and German output
-
-## Quick Installation
-
-Run the install script to set up `git-ai` on your system:
+Install:
 
 ```bash
 ./install.sh
 ```
 
-The installer will:
-- Build the application
-- Install it to `~/.local/bin/git-ai`
-- Add `~/.local/bin` to your PATH (if needed)
+Run:
 
-After installation, restart your terminal or run:
-```bash
-source ~/.bashrc        # For bash
-source ~/.zshrc         # For zsh
-source ~/.config/fish/config.fish  # For fish
-```
-
-Then run the tool:
 ```bash
 git-ai
 ```
 
-**On first run**, you'll be guided through LLM setup:
-- Choose provider (OpenAI, Gemini, Anthropic, Ollama, or Custom OpenAI-compatible)
-- Enter and save API key locally (optional for Ollama/custom endpoints)
-- Load available models live from the provider API (or local Ollama)
-- Fallback to manual model ID entry if discovery is unavailable
-- Select your default model
-
-## Configuration
-
-Configuration is stored in `~/.config/git-ai/config.json`:
-
-```json
-{
-  "githubToken": "ghp-your-github-token-here",
-  "llm": {
-    "defaultProfile": "smart-main",
-    "profiles": {
-      "smart-main": {
-        "provider": "openai",
-        "model": "provider-model-id",
-        "temperature": 0.7,
-        "reasoningEffort": "low",
-        "baseUrl": "https://api.openai.com/v1",
-        "apiKeyEnv": "OPENAI_API_KEY"
-      }
-    }
-  },
-  "preferences": {
-    "commit": {
-      "alwaysStageAll": true,
-      "defaultMode": "grouped",
-      "autoPushOnYes": false
-    },
-    "pullRequest": {
-      "createAsDraft": true
-    }
-  }
-}
-```
-
-### GitHub Token (Optional)
-
-To enable GitHub PR creation and releases, configure a GitHub token:
-
-1. Generate a token at: https://github.com/settings/tokens
-2. Required scopes: `repo` (for private repos) or `public_repo` (for public repos only)
-3. Add to config via `git-ai settings` or set `GITHUB_TOKEN` environment variable
-
-The tool will fall back to prompting you for a token when needed if not configured.
-
-### Configure Interactively
-
-Use the settings command for easy configuration:
-
-```bash
-git-ai settings
-```
-
-`git-ai settings` now includes:
-- One dedicated **LLM Setup Wizard** (provider/model/key/base URL/reasoning/temperature in one flow)
-- Separate individual setting points for commit/PR/GitHub options
-
-It allows you to:
-- Discover and select available provider models live (OpenAI, Gemini, Anthropic, Ollama, custom OpenAI-compatible)
-- Adjust reasoning effort (none, low, medium, high, xhigh)
-- Update temperature
-- Configure commit behavior (grouped/single, always stage all, `commit -y` auto-push)
-- Configure pull request behavior (draft by default or not)
-- Configure provider key env vars and optional local key storage
-- Reset to defaults
-
-### Configuration Options
-
-| Option | Description | Default | Range/Options |
-|--------|-------------|---------|---------------|
-| `llm.defaultProfile` | Active LLM profile | `smart-main` | profile name |
-| `llm.profiles.<name>.model` | Selected model ID | none (must be selected) | live-discovered from provider |
-| `llm.profiles.<name>.reasoningEffort` | Reasoning depth | `low` | `none`, `low`, `medium`, `high`, `xhigh` |
-| `llm.profiles.<name>.temperature` | Creativity vs consistency | `0.7` | `0.0` - `2.0` |
-| `preferences.commit.defaultMode` | Default commit mode | `grouped` | `grouped`, `single` |
-| `preferences.commit.alwaysStageAll` | Always stage all changes before commit | `true` | `true`, `false` |
-| `preferences.commit.autoPushOnYes` | Auto-push on `commit -y` / `auto -y` | `false` | `true`, `false` |
-| `preferences.pullRequest.createAsDraft` | Create PRs as draft by default | `true` | `true`, `false` |
-| `llm.profiles.<name>.provider` | Provider for profile | `openai` | `openai`, `gemini`, `anthropic`, `ollama`, `custom-openai-compatible` |
-| `llm.profiles.<name>.apiKeyEnv` | Environment variable to read key from | provider-specific | e.g. `OPENAI_API_KEY` |
-| `llm.profiles.<name>.apiKey` | Optional local stored key | - | provider API key (or empty for local/custom setups) |
-| `githubToken` | GitHub token for PR/release features | - | `ghp-...` or `GITHUB_TOKEN` env var |
-
-### Available Models
-
-Models are loaded dynamically from provider APIs during setup/settings.
-No model IDs are hardcoded anymore.
-Note: Some models/providers may not support every tuning parameter (e.g. `temperature`).
-`git-ai` falls back to provider/model defaults when unsupported.
-
-### Reasoning Effort Levels
-
-- **none**: No reasoning phase (fastest, most cost-effective)
-- **low**: Minimal reasoning (balanced speed and quality)
-- **medium**: Moderate reasoning depth
-- **high**: Deep reasoning (slower, more thorough)
-- **xhigh**: Maximum reasoning (provider/model support dependent)
-
-You can also edit the config file directly with your favorite editor.
-
-## Manual Setup (Alternative)
-
-If you prefer manual installation:
-
-1. Install dependencies:
-```bash
-bun install
-```
-
-2. Run the CLI:
-```bash
-bun run src/cli.ts
-```
-
-3. You'll be guided through provider + model selection on first run
-
-## Usage
-
-The CLI supports both interactive and direct command modes:
-
-### Interactive Mode
-Simply run without arguments to get an interactive menu:
-```bash
-git-ai
-```
-
-### Direct Commands
-Run specific commands directly:
-```bash
-git-ai auto            # Smart workflow
-git-ai auto -y         # Auto mode with all prompts auto-accepted (blind mode)
-git-ai auto --yolo     # YOLO mode: auto-merge PR and delete branch
-git-ai auto --release  # Release mode: full workflow + merge + release
-git-ai prepare         # Prepare for new feature
-git-ai branch          # Create branch from changes
-git-ai stage           # Stage files interactively
-git-ai commit          # Generate commit message
-git-ai commit --single # Force single-commit mode
-git-ai commit --grouped # Force grouped-commit mode
-git-ai pr              # Generate PR suggestion
-git-ai release         # Create a GitHub release (includes PRs by default)
-git-ai release --no-prs  # Create release without PR info
-git-ai unwrapped       # Year-in-code HTML report
-git-ai celebrate       # PR celebration HTML report
-git-ai cleanup         # Local cleanup: delete merged branches + merged worktrees
-git-ai worktree social-media-master  # Create ../<project>-social-media-master from main
-git-ai settings        # Configure settings
-git-ai --help          # Show help
-git-ai --version       # Show version
-```
-
-### Commands
-
-#### Auto Mode
-The intelligent workflow that handles everything for you:
-```bash
-# Make your changes
-# Run auto mode - it figures out what to do
-git-ai auto
-
-# Or use blind mode to auto-accept all prompts
-git-ai auto -y
-git-ai auto --yes
-
-# Or use YOLO mode for maximum automation
-git-ai auto --yolo
-
-# Or use Release mode for full release workflow
-git-ai auto --release
-```
-
-**What it does:**
-1. If you're on `main`/`master`: Creates a new branch based on your changes
-2. Stages and commits based on your commit settings
-3. Generates and commits with AI
-4. Pushes to origin
-5. Creates a GitHub Pull Request (draft behavior from settings)
-
-**Blind Mode (`-y` or `--yes` flag):**
-- Auto-accepts all prompts without user confirmation
-- Perfect for CI/CD pipelines or when you trust the AI completely
-- Still shows all generated content (branch names, commit messages, PR descriptions)
-- Skips PR creation if GitHub token is not configured
-
-**YOLO Mode (`--yolo` flag):**
-- Auto-merges the created PR after creation
-- Deletes the feature branch after successful merge
-- Maximum automation for rapid deployments
-- Does NOT imply blind mode (combine with `-y` for no prompts)
-
-**Release Mode (`--release` flag):**
-- Enables YOLO mode automatically (implies `--yolo`)
-- After PR merge, waits for GitHub to process
-- Switches to main/master and pulls latest changes
-- Automatically creates a new release with AI-generated notes
-- Perfect for quick hotfixes that need immediate release
-- Does NOT imply blind mode (combine with `-y` for no prompts)
-
-Perfect for quick fixes and features - just make your changes and run `git-ai auto`!
-
-#### Prepare for Feature
-Prepares your repository for starting a new feature by handling uncommitted changes and syncing with the base branch:
-```bash
-# You're on a feature branch with uncommitted changes
-git-ai prepare
-
-# Or use blind mode to auto-abort if there are changes
-git-ai prepare -y
-```
-
-**What it does:**
-1. Detects if you're on a feature branch or main/master
-2. If on feature branch with uncommitted changes, offers three options:
-   - **Commit**: Stages all changes (including untracked), generates AI commit message, commits them
-   - **Stash**: Temporarily saves your changes, then restores them on main
-   - **Discard**: Resets branch to HEAD (destructive, requires confirmation)
-   - **Abort**: Cancels the operation and keeps changes as-is
-3. Checks out to main/master (if not already there)
-4. Pulls latest changes from remote
-5. If you stashed: Reapplies your changes on main so you're ready to create a new feature branch
-
-**Works with all changes:**
-- Staged changes
-- Unstaged modifications
-- Untracked files
-- Perfect for any workflow, including IDEs that don't use git staging
-
-**Typical workflow:**
-```bash
-# You're working on feature/old-feature with uncommitted changes
-git-ai prepare
-
-# Choose "Stash"
-# Now you're on main with your previous changes ready
-# Create a new feature branch
-git-ai branch   # or git checkout -b feature/new-feature
-```
-
-#### Commit
-Generates a commit message from all your changes and commits them:
-```bash
-# No need to stage first - git-ai handles everything
-# Just run:
-git-ai commit
-
-# Works with:
-# - Staged changes
-# - Unstaged modifications  
-# - Untracked files
-```
-
-By default, `git-ai commit` stages all changes first (`preferences.commit.alwaysStageAll: true`).
-If you disable that setting, it uses only already staged files when available.
-
-#### Stage
-Interactive staging UI for selecting what should be in the index:
-```bash
-git-ai stage
-```
-
-The tool will:
-1. Show staged and unstaged files in one list
-2. Preselect files that are already staged
-3. Apply both stage and unstage changes based on your selection
-
-#### Branch
-Analyzes all your changes and creates a new branch with an AI-generated name:
-```bash
-# Make some changes (staged, unstaged, or untracked)
-# Create branch from changes
-git-ai branch
-```
-
-The tool will:
-1. Analyze your changes
-2. Suggest a branch name like `feature/add-authentication` or `bugfix/fix-login-error`
-3. Create and switch to the new branch
-4. Keep your changes staged
-
-#### PR
-Generates PR title and description from your branch commits:
-```bash
-# Make sure you're on a feature branch with commits
-# Generate PR title & description
-git-ai pr
-```
-
-The tool can also create the GitHub PR directly if you have a GitHub token configured.
-
-#### Release
-Creates a GitHub release with AI-generated release notes:
-```bash
-# Create a release (can be run from any branch)
-git-ai release
-
-# Create release without PR information
-git-ai release --no-prs
-
-# Auto-accept all prompts (uses AI-suggested version)
-git-ai release -y
-```
-
-**What it does:**
-1. Switches to main/master branch if not already there
-2. Pulls latest changes from origin
-3. Analyzes all commits since the last release/tag
-4. Fetches merged PRs for richer context (if GitHub token available)
-5. Determines appropriate semantic version bump (major, minor, or patch)
-6. Generates comprehensive release notes with AI (including PR references)
-7. Creates a new Git tag
-8. Publishes the release to GitHub
-
-**PR Integration (default):**
-- Automatically fetches merged PRs since last release
-- Uses PR titles and descriptions for better release notes
-- Considers PR labels (e.g., `breaking-change`, `enhancement`) for version bump
-- Can be disabled with `--no-prs` flag
-
-Without a GitHub token, tags are still created and pushed, but publishing the GitHub Release is skipped.
-
-#### Cleanup
-Cleans up local branches that have been merged into `origin/main` or `origin/master`:
-```bash
-# Delete merged branches
-git-ai cleanup
-```
-
-**What it does:**
-1. Fetches from `origin` and checks which local branches are merged into `origin/main` or `origin/master`
-2. Shows you the list of branches to be deleted
-3. Removes any non-main worktrees attached to those merged branches (`--force`, with folder cleanup fallback)
-4. Confirms before deletion
-5. Deletes local merged branches only (never deletes remote branches), even if `origin/<branch>` was already deleted
-6. Skips origin-missing branches that are not merged into `origin/main` or `origin/master`
-
-Protected branches (main, master, develop, staging) are never deleted.
-
-#### Worktree
-Creates a new worktree and branch from `main` in a sibling folder:
-```bash
-# Create branch + worktree from main
-git-ai worktree social-media-master
-```
-
-**What it does:**
-1. Validates the provided branch/worktree name with git branch rules
-2. If you are on a non-`main` branch with uncommitted changes, it aborts
-3. Switches to `main` (if needed) and requires `main` to be clean (no uncommitted changes)
-4. Creates a new worktree at `../<project>-<sanitized-name>`
-5. Creates a new branch with the original provided name from `main`
-
-Folder names are sanitized to valid characters (`a-z`, `0-9`, `.`, `_`, `-`).
-
-#### Unwrapped
-Creates a "Year in Code" HTML report for the last 365 days:
-```bash
-git-ai unwrapped
-git-ai unwrapped --language german
-```
-
-#### Celebrate
-Creates a visual celebration page for the current branch PR:
-```bash
-git-ai celebrate
-git-ai celebrate --language german
-```
+## Documentation
+
+- [Documentation Index](./docs/README.md)
+- [Getting Started: Installation](./docs/getting-started/installation.md)
+- [Getting Started: First Run](./docs/getting-started/first-run.md)
+- [Commands Overview](./docs/commands/overview.md)
+- [Daily Workflow](./docs/workflows/daily-flow.md)
+- [Release Workflow](./docs/workflows/release-flow.md)
+- [Configuration Overview](./docs/configuration/overview.md)
+- [Troubleshooting](./docs/troubleshooting/common-issues.md)
+- [Development](./docs/development/local-dev.md)
+
+## Common Commands
+
+### Command Quick Reference
+
+- `git-ai auto`: End-to-end automation (branch -> commit -> push -> PR).  
+  Docs: [Auto](./docs/commands/auto.md) | [Daily Workflow](./docs/workflows/daily-flow.md) | [Release Flow](./docs/workflows/release-flow.md)
+- `git-ai prepare`: Räumt den Arbeitsstand auf und bringt dich sauber auf `main`/`master`.  
+  Docs: [Prepare](./docs/commands/prepare.md) | [Daily Workflow](./docs/workflows/daily-flow.md)
+- `git-ai branch`: Erstellt einen AI-vorgeschlagenen Branch-Namen aus deinen Änderungen.  
+  Docs: [Branch](./docs/commands/branch.md) | [Daily Workflow](./docs/workflows/daily-flow.md)
+- `git-ai stage`: Interaktives Stage/Unstage in einem Schritt.  
+  Docs: [Stage](./docs/commands/stage.md) | [Commit](./docs/commands/commit.md)
+- `git-ai commit`: Generiert Commit-Message(s) aus deinen Änderungen und committet.  
+  Docs: [Commit](./docs/commands/commit.md) | [LLM Profiles](./docs/configuration/llm-profiles.md)
+- `git-ai pr`: Erzeugt PR-Titel/-Beschreibung und kann PR direkt anlegen.  
+  Docs: [PR](./docs/commands/pr.md) | [GitHub Token](./docs/configuration/github-token.md)
+- `git-ai release`: Erstellt Tag + Release Notes und publiziert GitHub Release.  
+  Docs: [Release](./docs/commands/release.md) | [Release Flow](./docs/workflows/release-flow.md) | [GitHub Token](./docs/configuration/github-token.md)
+- `git-ai cleanup`: Löscht lokal gemergte Branches und räumt zugehörige Worktrees auf.  
+  Docs: [Cleanup](./docs/commands/cleanup.md) | [Worktree](./docs/commands/worktree.md)
+- `git-ai worktree <branch-name>`: Erstellt einen neuen Worktree + Branch aus `main`.  
+  Docs: [Worktree](./docs/commands/worktree.md) | [Cleanup](./docs/commands/cleanup.md)
+- `git-ai settings`: Konfiguriert Provider, Modell, Token und Defaults.  
+  Docs: [First Run](./docs/getting-started/first-run.md) | [Configuration Overview](./docs/configuration/overview.md)
+- `git-ai unwrapped`: Erstellt den Year-in-Code HTML Report.  
+  Docs: [Reports](./docs/commands/reports.md)
+- `git-ai celebrate`: Erstellt eine visuelle PR-Celebration-Page.  
+  Docs: [Reports](./docs/commands/reports.md)
+
+Full command list and syntax: [Commands Overview](./docs/commands/overview.md)
 
 ## Development
 
-Run in development mode:
 ```bash
+bun install
 bun run dev
-```
-
-Build standalone executable:
-```bash
-bun run build
+bun test
+bun run typecheck
 ```
 
 ## Requirements
 
-- Bun v1.3.4 or higher
+- Bun `>=1.3.4`
 - Git repository
-- One provider API key (OpenAI, Gemini, or Anthropic)
+- Provider credentials for AI features
 
-## File Size Limits
-
-The tool automatically skips files that are:
-- Larger than 100KB
-- Migration files (based on common patterns)
-- Deleted files
-
-This ensures the AI analysis is fast and focused on meaningful code changes.
-
-## Uninstallation
-
-To remove git-ai from your system:
-
-```bash
-./uninstall.sh
-```
-
-The uninstaller will:
-- Remove the `git-ai` binary from `~/.local/bin`
-- Optionally remove the configuration folder (`~/.config/git-ai/`)
-- Optionally remove PATH entries from shell configs
-- Create backups of modified config files
-
-## Technology Stack
-
-- [Bun](https://bun.sh) - Fast JavaScript runtime
-- [LangChain](https://js.langchain.com/) - Unified multi-provider LLM orchestration
-- [OpenAI API](https://platform.openai.com/)
-- [Google Gemini API](https://ai.google.dev/)
-- [Anthropic API](https://docs.anthropic.com/)
-- [@clack/prompts](https://github.com/natemoo-re/clack) - Modern CLI prompts
-- TypeScript - Type-safe development
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+For full command, configuration, and workflow details, use the [docs index](./docs/README.md).
