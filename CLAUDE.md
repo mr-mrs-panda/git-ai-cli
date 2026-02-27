@@ -291,7 +291,8 @@ if (!typeMatch || !nameMatch) {
 **`generateAndCommit(options)`**
 - Stages all changes (if not already staged)
 - Filters out large files (>100KB) and migrations
-- Generates conventional commit message via configured LLM provider
+- In grouped mode: uses a single structured AI planning call (groups + per-group messages)
+- In single mode: generates conventional commit message via configured LLM provider
 - Executes commit with confirmation
 - Returns commit message or null if cancelled
 
