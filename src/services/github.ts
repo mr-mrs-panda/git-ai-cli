@@ -73,9 +73,9 @@ export async function ensureGitHubToken(autoYes: boolean = false): Promise<strin
       "GitHub Token Required"
     );
 
-    const token = await p.text({
+    const token = await p.password({
       message: "Enter your GitHub personal access token:",
-      placeholder: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      mask: "*",
       validate: (value) => {
         if (!value || value.length === 0) return "Token is required";
         if (!value.startsWith("ghp_") && !value.startsWith("github_pat_")) {

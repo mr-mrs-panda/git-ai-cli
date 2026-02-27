@@ -61,6 +61,56 @@ export interface UnwrappedOptions {
   language?: Language;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function safeJsonForScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+function sanitizeAiSummaryToSafeHtml(content: string): string {
+  const plain = content.replace(/<[^>]*>/g, "").replace(/\r/g, "").trim();
+  if (!plain) {
+    return "<p>No summary available.</p>";
+  }
+
+  const blocks = plain
+    .split(/\n{2,}/)
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0);
+
+  return blocks
+    .map((block) => {
+      const lines = block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const isBulletBlock = lines.length > 0 && lines.every((line) => /^[-*•]\s+/.test(line));
+
+      if (isBulletBlock) {
+        const items = lines
+          .map((line) => line.replace(/^[-*•]\s+/, ""))
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join("");
+        return `<ul>${items}</ul>`;
+      }
+
+      return `<p>${escapeHtml(lines.join(" "))}</p>`;
+    })
+    .join("\n");
+}
+
 // Translation system
 interface Translations {
   unwrapped: string;
@@ -862,6 +912,7 @@ export async function generateUnwrappedHTML(
 
   // Generate comprehensive AI summary (includes both overview and features)
   const summary = await generateAISummary(stats, language);
+  const safeSummaryHtml = sanitizeAiSummaryToSafeHtml(summary);
 
   onProgress("✨ Creating beautiful HTML report...");
 
@@ -876,17 +927,19 @@ export async function generateUnwrappedHTML(
   const personality = getDevPersonality(stats, language);
 
   // Generate chart data
-  const monthlyData = JSON.stringify(stats.commitsByMonth);
-  const dayData = JSON.stringify(stats.commitsByDayOfWeek);
-  const hourData = JSON.stringify(stats.commitsByHour);
-  const fileTypeData = JSON.stringify(stats.fileTypesChanged.slice(0, 6));
+  const monthlyData = safeJsonForScript(stats.commitsByMonth);
+  const dayData = safeJsonForScript(stats.commitsByDayOfWeek);
+  const hourData = safeJsonForScript(stats.commitsByHour);
+  const fileTypeData = safeJsonForScript(stats.fileTypesChanged.slice(0, 6));
+  const escapedRepoOwner = escapeHtml(stats.repoOwner);
+  const escapedRepoName = escapeHtml(stats.repoName);
 
   const html = `<!DOCTYPE html>
 <html lang="${language === "german" ? "de" : "en"}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${stats.repoOwner}/${stats.repoName} - ${t("unwrapped", language)} ${new Date().getFullYear()}</title>
+  <title>${escapedRepoOwner}/${escapedRepoName} - ${t("unwrapped", language)} ${new Date().getFullYear()}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -1406,7 +1459,7 @@ export async function generateUnwrappedHTML(
 <body>
   <div class="hero">
     <h1>🎉 ${t("unwrapped", language)}</h1>
-    <p class="repo-name">${stats.repoOwner}/${stats.repoName}</p>
+    <p class="repo-name">${escapedRepoOwner}/${escapedRepoName}</p>
     <p class="date-range">${formatDate(stats.startDate)} - ${formatDate(stats.endDate)}</p>
     <div class="year-badge">${new Date().getFullYear()} ${t("yearInReview", language)}</div>
   </div>
@@ -1430,7 +1483,7 @@ export async function generateUnwrappedHTML(
     <!-- AI Year-in-Review (comprehensive summary) -->
     <div class="ai-summary">
       <h3>🤖 ${t("aiYearInReview", language)}</h3>
-      <div class="ai-content">${summary}</div>
+      <div class="ai-content">${safeSummaryHtml}</div>
     </div>
     
     <!-- Quick Stats Cards -->
@@ -1478,7 +1531,7 @@ export async function generateUnwrappedHTML(
         <div class="author-item">
           <div class="author-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</div>
           <div class="author-info">
-            <div class="author-name">${author.name}</div>
+            <div class="author-name">${escapeHtml(author.name)}</div>
             <div class="author-stats">${author.commits} commits (${author.percentage}%)</div>
           </div>
           <div class="author-bar">
@@ -1557,7 +1610,7 @@ export async function generateUnwrappedHTML(
         <div class="emoji">⚡</div>
         <div class="text">
           <h4>${t("fastestPRMerge", language)}</h4>
-          <p>"${stats.fastestMerge.title.substring(0, 40)}..." in ${stats.fastestMerge.hours}h</p>
+          <p>"${escapeHtml(stats.fastestMerge.title.substring(0, 40))}..." in ${stats.fastestMerge.hours}h</p>
         </div>
       </div>
       ` : ''}
@@ -1566,7 +1619,7 @@ export async function generateUnwrappedHTML(
         <div class="emoji">🐢</div>
         <div class="text">
           <h4>${t("longestPR", language)}</h4>
-          <p>"${stats.slowestMerge.title.substring(0, 40)}..." took ${stats.slowestMerge.days} ${t("days", language)}</p>
+          <p>"${escapeHtml(stats.slowestMerge.title.substring(0, 40))}..." took ${stats.slowestMerge.days} ${t("days", language)}</p>
         </div>
       </div>
       ` : ''}
@@ -1581,7 +1634,7 @@ export async function generateUnwrappedHTML(
     <div class="chart-container">
       <div class="word-cloud">
         ${stats.mostCommonWords.map((w, i) => `
-          <span class="word-tag ${i < 2 ? 'size-1' : i < 5 ? 'size-2' : 'size-3'}">${w.word} (${w.count})</span>
+          <span class="word-tag ${i < 2 ? 'size-1' : i < 5 ? 'size-2' : 'size-3'}">${escapeHtml(w.word)} (${w.count})</span>
         `).join('')}
       </div>
     </div>
@@ -1597,7 +1650,7 @@ export async function generateUnwrappedHTML(
         ${stats.mostChangedFiles.slice(0, 8).map(f => `
           <div class="file-item">
             <span class="file-changes">+${f.changes}</span>
-            <span class="file-path">${f.path}</span>
+            <span class="file-path">${escapeHtml(f.path)}</span>
           </div>
         `).join('')}
       </div>
@@ -1614,8 +1667,8 @@ export async function generateUnwrappedHTML(
       ${stats.releases.map(r => `
         <div class="card">
           <div class="card-label">${new Date(r.date).toLocaleDateString()}</div>
-          <div class="card-value" style="font-size: 1.5rem;">${r.tag}</div>
-          <div class="card-subtitle">${r.name}</div>
+          <div class="card-value" style="font-size: 1.5rem;">${escapeHtml(r.tag)}</div>
+          <div class="card-subtitle">${escapeHtml(r.name)}</div>
         </div>
       `).join('')}
     </div>

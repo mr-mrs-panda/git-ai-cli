@@ -1,5 +1,5 @@
 import { join } from "path";
-import { mkdir } from "fs/promises";
+import { chmod, mkdir, writeFile } from "fs/promises";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type CommitMode = "single" | "grouped";
@@ -234,11 +234,18 @@ function getConfigPath(): string {
 async function ensureConfigDir(): Promise<void> {
   const configDir = getConfigDir();
   try {
-    await mkdir(configDir, { recursive: true });
+    await mkdir(configDir, { recursive: true, mode: 0o700 });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;
     }
+  }
+
+  // Best-effort hardening for existing directories.
+  try {
+    await chmod(configDir, 0o700);
+  } catch {
+    // Ignore on platforms/filesystems that do not support chmod.
   }
 }
 
@@ -265,7 +272,14 @@ export async function saveConfig(config: Config): Promise<void> {
   await ensureConfigDir();
   const configPath = getConfigPath();
   const content = JSON.stringify(config, null, 2);
-  await Bun.write(configPath, content);
+  await writeFile(configPath, content, { mode: 0o600 });
+
+  // Enforce restrictive permissions for both newly created and existing files.
+  try {
+    await chmod(configPath, 0o600);
+  } catch {
+    // Ignore on platforms/filesystems that do not support chmod.
+  }
 }
 
 export async function updateConfig(updates: ConfigUpdate): Promise<Config> {
