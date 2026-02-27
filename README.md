@@ -63,6 +63,22 @@ AI-powered Git commit message generator and PR suggestion tool built with Bun.
   - Prevents deletion of current branch and protected branches
   - Keeps your repository organized
 
+- **Stage Assistant**: Interactively stage and unstage files
+  - Shows staged and unstaged files in one TUI
+  - Pre-selects already staged files
+  - Lets you stage and unstage in one pass
+  - Great before commit generation
+
+- **Git Unwrapped**: Spotify Wrapped style yearly repository report
+  - Analyzes the last 365 days of activity
+  - Generates a rich HTML report and opens it in your browser
+  - Supports English and German output
+
+- **PR Celebrate**: Fancy report for your current pull request
+  - Collects PR stats (files, commits, lines, contributors)
+  - Generates a visual HTML celebration page
+  - Supports English and German output
+
 ## Quick Installation
 
 Run the install script to set up `git-ai` on your system:
@@ -214,12 +230,15 @@ git-ai auto --yolo     # YOLO mode: auto-merge PR and delete branch
 git-ai auto --release  # Release mode: full workflow + merge + release
 git-ai prepare         # Prepare for new feature
 git-ai branch          # Create branch from changes
+git-ai stage           # Stage files interactively
 git-ai commit          # Generate commit message
 git-ai commit --single # Force single-commit mode
 git-ai commit --grouped # Force grouped-commit mode
 git-ai pr              # Generate PR suggestion
 git-ai release         # Create a GitHub release (includes PRs by default)
 git-ai release --no-prs  # Create release without PR info
+git-ai unwrapped       # Year-in-code HTML report
+git-ai celebrate       # PR celebration HTML report
 git-ai cleanup         # Local cleanup: delete merged branches + merged worktrees
 git-ai worktree social-media-master  # Create ../<project>-social-media-master from main
 git-ai settings        # Configure settings
@@ -327,6 +346,20 @@ git-ai commit
 # - Untracked files
 ```
 
+By default, `git-ai commit` stages all changes first (`preferences.commit.alwaysStageAll: true`).
+If you disable that setting, it uses only already staged files when available.
+
+#### Stage
+Interactive staging UI for selecting what should be in the index:
+```bash
+git-ai stage
+```
+
+The tool will:
+1. Show staged and unstaged files in one list
+2. Preselect files that are already staged
+3. Apply both stage and unstage changes based on your selection
+
 #### Branch
 Analyzes all your changes and creates a new branch with an AI-generated name:
 ```bash
@@ -380,7 +413,7 @@ git-ai release -y
 - Considers PR labels (e.g., `breaking-change`, `enhancement`) for version bump
 - Can be disabled with `--no-prs` flag
 
-Requires a GitHub token to be configured.
+Without a GitHub token, tags are still created and pushed, but publishing the GitHub Release is skipped.
 
 #### Cleanup
 Cleans up local branches that have been merged into `origin/main` or `origin/master`:
@@ -414,6 +447,20 @@ git-ai worktree social-media-master
 5. Creates a new branch with the original provided name from `main`
 
 Folder names are sanitized to valid characters (`a-z`, `0-9`, `.`, `_`, `-`).
+
+#### Unwrapped
+Creates a "Year in Code" HTML report for the last 365 days:
+```bash
+git-ai unwrapped
+git-ai unwrapped --language german
+```
+
+#### Celebrate
+Creates a visual celebration page for the current branch PR:
+```bash
+git-ai celebrate
+git-ai celebrate --language german
+```
 
 ## Development
 
