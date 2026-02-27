@@ -27,12 +27,25 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Check TypeScript
+        run: bun run typecheck
+
       - name: Run tests
-        run: bun test
-        continue-on-error: true # Continue even if no tests exist yet
+        run: bun run test:ci
 
       - name: Build project
         run: bun run build
+
+      - name: Smoke test CLI
+        run: |
+          if [ -f "./git-ai.exe" ]; then
+            ./git-ai.exe --help
+            ./git-ai.exe --version
+          else
+            ./git-ai --help
+            ./git-ai --version
+          fi
+        shell: bash
 
       - name: Check build artifact
         run: |
@@ -54,8 +67,8 @@ jobs:
             ./git-ai.exe
           if-no-files-found: error
 
-  lint:
-    name: Lint
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
 
     steps:
@@ -69,5 +82,4 @@ jobs:
         run: bun install
 
       - name: Check TypeScript
-        run: bun run tsc --noEmit
-        continue-on-error: true # Don't fail if tsc script doesn't exist
+        run: bun run typecheck
