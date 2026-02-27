@@ -68,20 +68,42 @@ main() {
     print_header "🗑️  Git AI CLI Uninstaller"
 
     BIN_DIR="$HOME/.local/bin"
-    BIN_PATH="$BIN_DIR/git-ai"
+    PRIMARY_BIN="git-ai-cli"
+    ALIASES=("gitai" "commitfox")
+    BIN_PATH="$BIN_DIR/$PRIMARY_BIN"
     CONFIG_DIR="$HOME/.config/git-ai"
+    FOUND_INSTALL=0
 
     # Check if installed
-    if [ ! -f "$BIN_PATH" ] && [ ! -d "$CONFIG_DIR" ]; then
-        print_warning "git-ai does not appear to be installed"
+    if [ -e "$BIN_PATH" ] || [ -L "$BIN_PATH" ]; then
+        FOUND_INSTALL=1
+    fi
+    for alias in "${ALIASES[@]}"; do
+        if [ -e "$BIN_DIR/$alias" ] || [ -L "$BIN_DIR/$alias" ]; then
+            FOUND_INSTALL=1
+            break
+        fi
+    done
+    if [ -d "$CONFIG_DIR" ]; then
+        FOUND_INSTALL=1
+    fi
+
+    if [ "$FOUND_INSTALL" -eq 0 ]; then
+        print_warning "Git AI CLI does not appear to be installed"
         print_info "Binary not found at: $BIN_PATH"
         print_info "Config not found at: $CONFIG_DIR"
         exit 0
     fi
 
-    if [ -f "$BIN_PATH" ]; then
+    if [ -f "$BIN_PATH" ] || [ -L "$BIN_PATH" ]; then
         print_info "Found binary at: $BIN_PATH"
     fi
+    for alias in "${ALIASES[@]}"; do
+        alias_path="$BIN_DIR/$alias"
+        if [ -L "$alias_path" ] || [ -f "$alias_path" ]; then
+            print_info "Found alias at: $alias_path"
+        fi
+    done
 
     if [ -d "$CONFIG_DIR" ]; then
         print_info "Found config at: $CONFIG_DIR"
@@ -89,7 +111,7 @@ main() {
 
     # Confirm uninstallation
     echo ""
-    print_warning "This will remove git-ai from your system"
+    print_warning "This will remove Git AI CLI commands from your system"
     read -p "Are you sure you want to uninstall? (y/N): " confirm
 
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -100,10 +122,26 @@ main() {
     print_header "🗑️  Removing Files"
 
     # Remove binary
-    if [ -f "$BIN_PATH" ]; then
+    if [ -f "$BIN_PATH" ] || [ -L "$BIN_PATH" ]; then
         rm "$BIN_PATH"
         print_success "Removed $BIN_PATH"
     fi
+
+    # Remove managed aliases
+    for alias in "${ALIASES[@]}"; do
+        alias_path="$BIN_DIR/$alias"
+        if [ -L "$alias_path" ]; then
+            target="$(readlink "$alias_path" || true)"
+            if [ "$target" = "$PRIMARY_BIN" ] || [ "$target" = "$BIN_PATH" ]; then
+                rm "$alias_path"
+                print_success "Removed alias $alias_path"
+            else
+                print_warning "Skipped alias $alias_path (points elsewhere: $target)"
+            fi
+        elif [ -f "$alias_path" ]; then
+            print_warning "Skipped $alias_path (regular file; not removing automatically)"
+        fi
+    done
 
     # Ask about removing config
     echo ""

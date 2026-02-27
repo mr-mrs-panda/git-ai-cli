@@ -115,14 +115,14 @@ main() {
 
     # Build the application
     print_info "Building executable..."
-    bun build src/cli.ts --compile --outfile git-ai
+    bun build src/cli.ts --compile --outfile git-ai-cli
 
-    if [ ! -f "git-ai" ]; then
+    if [ ! -f "git-ai-cli" ]; then
         print_error "Build failed - executable not created"
         exit 1
     fi
 
-    print_success "Built executable: git-ai"
+    print_success "Built executable: git-ai-cli"
 
     print_header "📥 Installing to System"
 
@@ -135,11 +135,37 @@ main() {
         mkdir -p "$BIN_DIR"
     fi
 
-    # Install the executable
-    print_info "Installing git-ai to $BIN_DIR..."
-    cp git-ai "$BIN_DIR/git-ai"
-    chmod +x "$BIN_DIR/git-ai"
-    print_success "Installed to $BIN_DIR/git-ai"
+    PRIMARY_BIN="git-ai-cli"
+    ALIASES=("gitai" "commitfox")
+    PRIMARY_PATH="$BIN_DIR/$PRIMARY_BIN"
+
+    # Install the primary executable
+    print_info "Installing $PRIMARY_BIN to $BIN_DIR..."
+    cp "$PRIMARY_BIN" "$PRIMARY_PATH"
+    chmod +x "$PRIMARY_PATH"
+    print_success "Installed to $PRIMARY_PATH"
+
+    # Install aliases as symlinks when safe
+    for alias in "${ALIASES[@]}"; do
+        alias_path="$BIN_DIR/$alias"
+        if [ -L "$alias_path" ]; then
+            current_target="$(readlink "$alias_path" || true)"
+            if [ "$current_target" = "$PRIMARY_BIN" ] || [ "$current_target" = "$PRIMARY_PATH" ]; then
+                print_success "Alias already configured: $alias -> $PRIMARY_BIN"
+                continue
+            fi
+            print_warning "Skipping alias '$alias' (already points elsewhere: $current_target)"
+            continue
+        fi
+
+        if [ -e "$alias_path" ]; then
+            print_warning "Skipping alias '$alias' (path already exists and is not a managed symlink)"
+            continue
+        fi
+
+        ln -s "$PRIMARY_BIN" "$alias_path"
+        print_success "Installed alias: $alias -> $PRIMARY_BIN"
+    done
 
     # Detect shell and add to PATH if needed
     print_header "⚙️  Configuring Shell"
@@ -176,12 +202,17 @@ main() {
     echo "  1. Reload your shell (or start a new terminal)"
     echo ""
     echo "  2. Run the tool:"
-    echo "     ${BLUE}git-ai${NC}"
+    echo "     ${BLUE}git-ai-cli${NC}"
+    echo ""
+    echo "     Aliases:"
+    echo "     ${BLUE}gitai${NC}"
+    echo "     ${BLUE}commitfox${NC}"
     echo ""
     echo "  3. You'll be prompted to enter your OpenAI API key on first run"
     echo "     Get your key from: https://platform.openai.com/api-keys"
     echo ""
-    print_info "The tool will be installed at: $BIN_DIR/git-ai"
+    print_info "The tool will be installed at: $BIN_DIR/$PRIMARY_BIN"
+    print_info "Aliases (when available) are installed at: $BIN_DIR/gitai and $BIN_DIR/commitfox"
     print_info "Configuration will be stored at: ~/.config/git-ai/config.json"
     echo ""
 
@@ -190,7 +221,7 @@ main() {
         read -p "Would you like to run the tool now? (y/N): " run_now
         if [[ "$run_now" =~ ^[Yy]$ ]]; then
             echo ""
-            "$BIN_DIR/git-ai"
+            "$PRIMARY_PATH"
         fi
     fi
 

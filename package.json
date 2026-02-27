@@ -27,11 +27,13 @@
   "module": "index.ts",
   "type": "module",
   "bin": {
-    "git-ai": "./src/cli.ts"
+    "git-ai-cli": "./src/cli.ts",
+    "gitai": "./src/cli.ts",
+    "commitfox": "./src/cli.ts"
   },
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "build": "bun build src/cli.ts --compile --outfile git-ai",
+    "build": "bun build src/cli.ts --compile --outfile git-ai-cli",
     "test": "bun test",
     "test:ci": "bun test",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
