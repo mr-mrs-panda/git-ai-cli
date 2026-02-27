@@ -1,4 +1,4 @@
-# Git AI CLI
+# Git AI CLI (commitfox)
 
 [![CI](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/ci.yml)
 [![Release](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/release.yml/badge.svg)](https://github.com/mr-mrs-panda/git-ai-cli/actions/workflows/release.yml)
@@ -7,12 +7,6 @@
 AI-powered Git workflow assistant built with Bun.
 
 [demo.webm](https://github.com/user-attachments/assets/84d26b0c-3c78-45eb-8e0e-5fef7b0b7a44)
-
-## AI Generation Notice
-
-Large parts of this repository were generated with AI assistance, primarily using Claude Code, GitHub Copilot, and Codex.
-
-I am aware that AI-generated code can be risky or incorrect in subtle ways. I have done my best to review every single line of code in this repository before shipping changes.
 
 ## Quick Start
 
@@ -25,7 +19,14 @@ Install:
 Run:
 
 ```bash
-git-ai
+git-ai-cli
+```
+
+Aliases:
+
+```bash
+gitai
+commitfox
 ```
 
 ## Documentation
@@ -42,20 +43,22 @@ git-ai
 
 | Command | What it does | Docs |
 | --- | --- | --- |
-| `git-ai auto` | Runs the full flow: branch, commit, push, and PR. | [Auto](./docs/commands/auto.md) |
-| `git-ai prepare` | Prepares a clean base branch and handles local changes safely. | [Prepare](./docs/commands/prepare.md) |
-| `git-ai branch` | Suggests and creates a branch name from your current changes. | [Branch](./docs/commands/branch.md) |
-| `git-ai stage` | Interactively stages and unstages files in one view. | [Stage](./docs/commands/stage.md) |
-| `git-ai commit` | Generates commit message(s) from your diff and commits. | [Commit](./docs/commands/commit.md) |
-| `git-ai pr` | Generates PR title/description and can open a PR. | [PR](./docs/commands/pr.md) |
-| `git-ai release` | Creates a version tag and release notes, then publishes release. | [Release](./docs/commands/release.md) |
-| `git-ai cleanup` | Removes local branches/worktrees already merged into base. | [Cleanup](./docs/commands/cleanup.md) |
-| `git-ai worktree <name>` | Creates a sibling worktree and branch from `main`. | [Worktree](./docs/commands/worktree.md) |
-| `git-ai settings` | Configures provider, model, tokens, and defaults. | [First Run and Setup](./docs/getting-started/first-run.md) |
-| `git-ai unwrapped` | Builds a Year in Code HTML report. | [Reports](./docs/commands/reports.md) |
-| `git-ai celebrate` | Builds a visual PR celebration page. | [Reports](./docs/commands/reports.md) |
+| `git-ai-cli auto` | Runs the full flow: branch, commit, push, and PR. | [Auto](./docs/commands/auto.md) |
+| `git-ai-cli prepare` | Prepares a clean base branch and handles local changes safely. | [Prepare](./docs/commands/prepare.md) |
+| `git-ai-cli branch` | Suggests and creates a branch name from your current changes. | [Branch](./docs/commands/branch.md) |
+| `git-ai-cli stage` | Interactively stages and unstages files in one view. | [Stage](./docs/commands/stage.md) |
+| `git-ai-cli commit` | Generates commit message(s) from your diff and commits. | [Commit](./docs/commands/commit.md) |
+| `git-ai-cli pr` | Generates PR title/description and can open a PR. | [PR](./docs/commands/pr.md) |
+| `git-ai-cli release` | Creates a version tag and release notes, then publishes release. | [Release](./docs/commands/release.md) |
+| `git-ai-cli cleanup` | Removes local branches/worktrees already merged into base. | [Cleanup](./docs/commands/cleanup.md) |
+| `git-ai-cli worktree <name>` | Creates a sibling worktree and branch from `main`. | [Worktree](./docs/commands/worktree.md) |
+| `git-ai-cli settings` | Configures provider, model, tokens, and defaults. | [First Run and Setup](./docs/getting-started/first-run.md) |
+| `git-ai-cli unwrapped` | Builds a Year in Code HTML report. | [Reports](./docs/commands/reports.md) |
+| `git-ai-cli celebrate` | Builds a visual PR celebration page. | [Reports](./docs/commands/reports.md) |
 
 More command syntax and options: [Commands Overview](./docs/commands/overview.md)
+
+All commands also work with `gitai` and `commitfox` aliases.
 
 ## Cross Links
 
@@ -79,5 +82,17 @@ bun run typecheck
 - Bun `>=1.3.4`
 - Git repository
 - Provider credentials for AI features
+
+## Command Naming Note
+
+To avoid CLI naming conflicts with another project (`git-ai`), this project uses `git-ai-cli` as the primary command, with `gitai` and `commitfox` as aliases.
+
+Reference: https://github.com/git-ai-project/git-ai
+
+## AI Generation Notice
+
+Large parts of this repository were generated with AI assistance, primarily using Claude Code, GitHub Copilot, and Codex.
+
+I am aware that AI-generated code can be risky or incorrect in subtle ways. I have done my best to review every single line of code in this repository before shipping changes.
 
 For full command, configuration, and workflow details, use the [docs index](./docs/README.md).
