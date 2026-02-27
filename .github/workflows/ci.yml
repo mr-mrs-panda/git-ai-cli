@@ -34,20 +34,20 @@ jobs:
 
       - name: Smoke test CLI
         run: |
-          if [ -f "./git-ai.exe" ]; then
-            ./git-ai.exe --help
-            ./git-ai.exe --version
+          if [ -f "./git-ai-cli.exe" ]; then
+            ./git-ai-cli.exe --help
+            ./git-ai-cli.exe --version
           else
-            ./git-ai --help
-            ./git-ai --version
+            ./git-ai-cli --help
+            ./git-ai-cli --version
           fi
         shell: bash
 
       - name: Check build artifact
         run: |
-          if [ -f "./git-ai" ] || [ -f "./git-ai.exe" ]; then
-            echo "Build successful - git-ai binary created"
-            ls -lh ./git-ai* || true
+          if [ -f "./git-ai-cli" ] || [ -f "./git-ai-cli.exe" ]; then
+            echo "Build successful - git-ai-cli binary created"
+            ls -lh ./git-ai-cli* || true
           else
             echo "Build failed - no binary found"
             exit 1
@@ -59,8 +59,8 @@ jobs:
         with:
           name: git-ai-ubuntu-latest
           path: |
-            ./git-ai
-            ./git-ai.exe
+            ./git-ai-cli
+            ./git-ai-cli.exe
           if-no-files-found: error
 
   typecheck:
