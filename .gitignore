@@ -35,5 +35,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # User-specific files
 git-ai
+git-ai-cli
+gitai
+commitfox
 .env.example
 *.bun-build
