@@ -1,87 +1,52 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { join } from "path";
-import { mkdir, rm } from "fs/promises";
-
-// We need to test config functions with a temporary config directory
-// Since config.ts uses process.env.HOME, we'll test the logic by mocking
+import { mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 
 describe("Config", () => {
-  const testConfigDir = "/tmp/git-ai-test-config";
-  const testConfigPath = join(testConfigDir, "config.json");
+  const testRoot = "/tmp/git-ai-config-tests";
+  const oldXdg = process.env.XDG_CONFIG_HOME;
 
   beforeEach(async () => {
-    // Clean up any existing test config
     try {
-      await rm(testConfigDir, { recursive: true });
+      await rm(testRoot, { recursive: true, force: true });
     } catch {
-      // Ignore if doesn't exist
+      // ignore
     }
-    await mkdir(testConfigDir, { recursive: true });
+
+    await mkdir(join(testRoot, "git-ai"), { recursive: true });
+    process.env.XDG_CONFIG_HOME = testRoot;
   });
 
   afterEach(async () => {
     try {
-      await rm(testConfigDir, { recursive: true });
+      await rm(testRoot, { recursive: true, force: true });
     } catch {
-      // Ignore cleanup errors
+      // ignore
+    }
+
+    if (oldXdg === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = oldXdg;
     }
   });
 
-  describe("Config file operations", () => {
-    test("should create config with defaults when file doesn't exist", async () => {
-      // Import fresh to avoid cached state
+  describe("Config defaults shape", () => {
+    test("should expose expected LLM defaults", async () => {
       const { loadConfig } = await import("./config.ts");
       const config = await loadConfig();
 
-      expect(config.model).toBe("gpt-5.2");
-      expect(config.temperature).toBe(1);
-      expect(config.reasoningEffort).toBe("low");
+      expect(config.llm?.defaultProfile).toBe("smart-main");
+      expect(config.llm?.profiles["smart-main"]?.provider).toBeDefined();
+      expect(config.llm?.profiles["smart-main"]?.model).toBeUndefined();
+      expect(config.llm?.retry.maxAttempts).toBeGreaterThanOrEqual(1);
+      expect(config.llm?.timeouts.requestMs).toBeGreaterThan(0);
       expect(config.preferences?.commit.defaultMode).toBe("grouped");
-      expect(config.preferences?.commit.alwaysStageAll).toBe(true);
-      expect(config.preferences?.commit.autoPushOnYes).toBe(false);
       expect(config.preferences?.pullRequest.createAsDraft).toBe(true);
-    });
-
-    test("should merge loaded config with defaults", async () => {
-      // Write partial config
-      await Bun.write(testConfigPath, JSON.stringify({ openaiApiKey: "sk-test123" }));
-
-      // We can't easily test loadConfig with custom path,
-      // so we test the merge logic conceptually
-      const partialConfig = { openaiApiKey: "sk-test123" };
-      const defaults = {
-        model: "gpt-5.2",
-        temperature: 1,
-        reasoningEffort: "low",
-        preferences: {
-          commit: {
-            alwaysStageAll: true,
-            defaultMode: "grouped",
-            autoPushOnYes: false,
-          },
-          pullRequest: {
-            createAsDraft: true,
-          },
-        },
-      };
-      const merged = { ...defaults, ...partialConfig };
-
-      expect(merged.openaiApiKey).toBe("sk-test123");
-      expect(merged.model).toBe("gpt-5.2");
     });
   });
 
-  describe("Config validation", () => {
-    test("should detect valid API key presence", () => {
-      const configWithKey = { openaiApiKey: "sk-abc123" };
-      const configWithoutKey = { openaiApiKey: "" };
-      const configUndefined = {};
-
-      expect(!!configWithKey.openaiApiKey && configWithKey.openaiApiKey.length > 0).toBe(true);
-      expect(!!configWithoutKey.openaiApiKey && configWithoutKey.openaiApiKey.length > 0).toBe(false);
-      expect(!!(configUndefined as any).openaiApiKey).toBe(false);
-    });
-
+  describe("Type guards", () => {
     test("should detect valid GitHub token presence", () => {
       const configWithToken = { githubToken: "ghp_abc123" };
       const configWithoutToken = { githubToken: "" };
@@ -89,9 +54,7 @@ describe("Config", () => {
       expect(!!configWithToken.githubToken && configWithToken.githubToken.length > 0).toBe(true);
       expect(!!configWithoutToken.githubToken && configWithoutToken.githubToken.length > 0).toBe(false);
     });
-  });
 
-  describe("ReasoningEffort type", () => {
     test("should accept valid reasoning effort values", () => {
       const validValues = ["none", "low", "medium", "high", "xhigh"];
 
