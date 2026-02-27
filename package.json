@@ -32,7 +32,10 @@
   "scripts": {
     "dev": "bun run src/cli.ts",
     "build": "bun build src/cli.ts --compile --outfile git-ai",
-    "test": "bun test"
+    "test": "bun test",
+    "test:ci": "bun test",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "smoke:ci": "bun run src/cli.ts --help && bun run src/cli.ts --version"
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",

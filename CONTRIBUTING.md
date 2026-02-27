@@ -31,10 +31,15 @@ Thanks for your interest in contributing! This project is primarily maintained b
 
 4. **Run tests**
    ```bash
-   bun test
+   bun run test:ci
    ```
 
-5. **Build the binary**
+5. **Run typecheck**
+   ```bash
+   bun run typecheck
+   ```
+
+6. **Build the binary**
    ```bash
    bun run build
    ```
