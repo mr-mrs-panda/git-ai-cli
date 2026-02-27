@@ -24,46 +24,40 @@ git-ai
 
 ## Documentation
 
-- [Documentation Index](./docs/README.md)
-- [Getting Started: Installation](./docs/getting-started/installation.md)
-- [Getting Started: First Run](./docs/getting-started/first-run.md)
-- [Commands Overview](./docs/commands/overview.md)
-- [Daily Workflow](./docs/workflows/daily-flow.md)
-- [Release Workflow](./docs/workflows/release-flow.md)
-- [Configuration Overview](./docs/configuration/overview.md)
+- [Docs Home](./docs/README.md)
+- [Getting Started](./docs/getting-started/installation.md)
+- [Command Reference](./docs/commands/overview.md)
+- [Workflows](./docs/workflows/daily-flow.md)
+- [Configuration](./docs/configuration/overview.md)
 - [Troubleshooting](./docs/troubleshooting/common-issues.md)
 - [Development](./docs/development/local-dev.md)
 
 ## Common Commands
 
-### Command Quick Reference
+| Command | What it does | Docs |
+| --- | --- | --- |
+| `git-ai auto` | Runs the full flow: branch, commit, push, and PR. | [Auto](./docs/commands/auto.md) |
+| `git-ai prepare` | Prepares a clean base branch and handles local changes safely. | [Prepare](./docs/commands/prepare.md) |
+| `git-ai branch` | Suggests and creates a branch name from your current changes. | [Branch](./docs/commands/branch.md) |
+| `git-ai stage` | Interactively stages and unstages files in one view. | [Stage](./docs/commands/stage.md) |
+| `git-ai commit` | Generates commit message(s) from your diff and commits. | [Commit](./docs/commands/commit.md) |
+| `git-ai pr` | Generates PR title/description and can open a PR. | [PR](./docs/commands/pr.md) |
+| `git-ai release` | Creates a version tag and release notes, then publishes release. | [Release](./docs/commands/release.md) |
+| `git-ai cleanup` | Removes local branches/worktrees already merged into base. | [Cleanup](./docs/commands/cleanup.md) |
+| `git-ai worktree <name>` | Creates a sibling worktree and branch from `main`. | [Worktree](./docs/commands/worktree.md) |
+| `git-ai settings` | Configures provider, model, tokens, and defaults. | [First Run and Setup](./docs/getting-started/first-run.md) |
+| `git-ai unwrapped` | Builds a Year in Code HTML report. | [Reports](./docs/commands/reports.md) |
+| `git-ai celebrate` | Builds a visual PR celebration page. | [Reports](./docs/commands/reports.md) |
 
-- `git-ai auto`: End-to-end automation (branch -> commit -> push -> PR).  
-  Docs: [Auto](./docs/commands/auto.md) | [Daily Workflow](./docs/workflows/daily-flow.md) | [Release Flow](./docs/workflows/release-flow.md)
-- `git-ai prepare`: Räumt den Arbeitsstand auf und bringt dich sauber auf `main`/`master`.  
-  Docs: [Prepare](./docs/commands/prepare.md) | [Daily Workflow](./docs/workflows/daily-flow.md)
-- `git-ai branch`: Erstellt einen AI-vorgeschlagenen Branch-Namen aus deinen Änderungen.  
-  Docs: [Branch](./docs/commands/branch.md) | [Daily Workflow](./docs/workflows/daily-flow.md)
-- `git-ai stage`: Interaktives Stage/Unstage in einem Schritt.  
-  Docs: [Stage](./docs/commands/stage.md) | [Commit](./docs/commands/commit.md)
-- `git-ai commit`: Generiert Commit-Message(s) aus deinen Änderungen und committet.  
-  Docs: [Commit](./docs/commands/commit.md) | [LLM Profiles](./docs/configuration/llm-profiles.md)
-- `git-ai pr`: Erzeugt PR-Titel/-Beschreibung und kann PR direkt anlegen.  
-  Docs: [PR](./docs/commands/pr.md) | [GitHub Token](./docs/configuration/github-token.md)
-- `git-ai release`: Erstellt Tag + Release Notes und publiziert GitHub Release.  
-  Docs: [Release](./docs/commands/release.md) | [Release Flow](./docs/workflows/release-flow.md) | [GitHub Token](./docs/configuration/github-token.md)
-- `git-ai cleanup`: Löscht lokal gemergte Branches und räumt zugehörige Worktrees auf.  
-  Docs: [Cleanup](./docs/commands/cleanup.md) | [Worktree](./docs/commands/worktree.md)
-- `git-ai worktree <branch-name>`: Erstellt einen neuen Worktree + Branch aus `main`.  
-  Docs: [Worktree](./docs/commands/worktree.md) | [Cleanup](./docs/commands/cleanup.md)
-- `git-ai settings`: Konfiguriert Provider, Modell, Token und Defaults.  
-  Docs: [First Run](./docs/getting-started/first-run.md) | [Configuration Overview](./docs/configuration/overview.md)
-- `git-ai unwrapped`: Erstellt den Year-in-Code HTML Report.  
-  Docs: [Reports](./docs/commands/reports.md)
-- `git-ai celebrate`: Erstellt eine visuelle PR-Celebration-Page.  
-  Docs: [Reports](./docs/commands/reports.md)
+More command syntax and options: [Commands Overview](./docs/commands/overview.md)
 
-Full command list and syntax: [Commands Overview](./docs/commands/overview.md)
+## Cross Links
+
+- Want a recommended daily path? [Daily Workflow](./docs/workflows/daily-flow.md)
+- Shipping hotfixes fast? [Release Workflow](./docs/workflows/release-flow.md)
+- Setting up model/provider details? [LLM Profiles](./docs/configuration/llm-profiles.md)
+- Configuring GitHub access? [GitHub Token](./docs/configuration/github-token.md)
+- Running into issues? [Common Issues](./docs/troubleshooting/common-issues.md)
 
 ## Development
 
