@@ -131,6 +131,45 @@ src/
     └── openai.ts      # Prompt/builders and AI helper functions (via llm.ts)
 ```
 
+### Documentation Structure (`docs/`)
+
+The project now uses a multi-page docs architecture. Documentation updates are part of the definition of done.
+
+```
+docs/
+├── README.md                 # Docs hub and navigation entrypoint
+├── getting-started/
+│   ├── installation.md
+│   └── first-run.md
+├── commands/
+│   ├── overview.md
+│   ├── auto.md
+│   ├── prepare.md
+│   ├── commit.md
+│   ├── stage.md
+│   ├── branch.md
+│   ├── pr.md
+│   ├── release.md
+│   ├── cleanup.md
+│   ├── worktree.md
+│   └── reports.md
+├── workflows/
+│   ├── daily-flow.md
+│   └── release-flow.md
+├── configuration/
+│   ├── overview.md
+│   ├── llm-profiles.md
+│   └── github-token.md
+├── troubleshooting/
+│   └── common-issues.md
+└── development/
+    ├── local-dev.md
+    └── testing.md
+```
+
+**IMPORTANT:** Keep docs up to date at all times. If code behavior changes, update `README.md` and the corresponding `docs/**` pages in the same PR.
+**IMPORTANT:** Preserve docs navigation patterns (top links to Home/Docs Index, TOC, related links, and back-to-index link) when editing or adding docs pages.
+
 ---
 
 ## Critical Technical Patterns
@@ -390,7 +429,11 @@ const result = await createRelease({
    - Add to command validation array
    - Add to command execution switch
 4. Update help text in `showHelp()`
-5. Update README.md with usage examples
+5. Update `README.md` with usage examples
+6. Update matching docs pages (`docs/commands/*`, `docs/workflows/*`, and config docs if relevant)
+7. Verify docs links and command examples after edits
+
+**IMPORTANT:** A new or changed command is not complete until documentation is updated.
 
 ---
 
@@ -530,6 +573,9 @@ Before committing changes:
    - On feature branch
 
 4. Verify spinners stop correctly and don't hang
+5. Verify documentation is current for all changed behavior in `README.md` and `docs/**`
+
+**IMPORTANT:** Never merge behavior changes with stale docs.
 
 ---
 
@@ -554,6 +600,7 @@ git push origin v1.0.1
 4. **Don't use `stdout: "inherit"` during spinner** - Pipe output instead
 5. **Don't forget `reasoning_effort: "none"` for structured AI outputs** - Prevents reasoning text from breaking parsers
 6. **Don't hardcode fallback values** - Always include robust parsing with fallbacks
+7. **Don't ship undocumented behavior changes** - Keep `README.md` and `docs/**` synchronized with code
 
 ---
 
