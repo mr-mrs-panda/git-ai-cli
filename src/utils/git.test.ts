@@ -57,23 +57,32 @@ function parseConventionalCommit(message: string): {
   const match = message.match(/^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/);
 
   if (!match) return null;
+  const type = match[1];
+  const scope = match[2];
+  const bang = match[3];
+  const description = match[4];
+  if (!type || !description) return null;
 
   return {
-    type: match[1],
-    scope: match[2],
-    description: match[4],
-    breaking: match[3] === "!",
+    type,
+    scope,
+    description,
+    breaking: bang === "!",
   };
 }
 
 function parseVersion(tag: string): { major: number; minor: number; patch: number } | null {
   const match = tag.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
   if (!match) return null;
+  const major = match[1];
+  const minor = match[2];
+  const patch = match[3];
+  if (!major || !minor || !patch) return null;
 
   return {
-    major: parseInt(match[1], 10),
-    minor: parseInt(match[2], 10),
-    patch: parseInt(match[3], 10),
+    major: parseInt(major, 10),
+    minor: parseInt(minor, 10),
+    patch: parseInt(patch, 10),
   };
 }
 
@@ -255,4 +264,3 @@ describe("Semantic Version Parsing", () => {
     expect(bumpVersion({ major: 1, minor: 2, patch: 3 }, "patch")).toBe("v1.2.4");
   });
 });
-
