@@ -9,11 +9,7 @@ on:
 jobs:
   build-and-test:
     name: Build and Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        bun-version: [latest]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -22,7 +18,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
-          bun-version: ${{ matrix.bun-version }}
+          bun-version: latest
 
       - name: Install dependencies
         run: bun install
@@ -61,7 +57,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: git-ai-${{ matrix.os }}
+          name: git-ai-ubuntu-latest
           path: |
             ./git-ai
             ./git-ai.exe
