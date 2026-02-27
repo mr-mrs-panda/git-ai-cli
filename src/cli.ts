@@ -42,7 +42,8 @@ Options:
   -h, --help            Show this help message
   -v, --version         Show version
   -y, --yes             Auto-accept all prompts (blind mode)
-  --grouped             Create multiple logical commits (commit command only)
+  --grouped             Force grouped commits (commit command only)
+  --single              Force a single commit (commit command only)
   --yolo                YOLO mode: auto-merge PR and delete branch
   --release             Release mode: auto workflow + merge + release (implies --yolo)
   --no-prs              Disable fetching PR info for release notes (PRs are included by default)
@@ -57,8 +58,9 @@ Examples:
   git-ai prepare      # Prepare for a new feature
   git-ai branch       # Create branch from changes
   git-ai stage        # Stage files interactively
-  git-ai commit       # Generate a single commit (default)
-  git-ai commit --grouped  # Create multiple logical commits
+  git-ai commit       # Generate commit(s) based on your settings
+  git-ai commit --grouped  # Force multiple logical commits
+  git-ai commit --single   # Force a single commit
   git-ai commit -y    # Auto-accept all confirmations
   git-ai pr           # Generate PR suggestion
   git-ai release      # Create a release (includes PRs if GitHub token available)
@@ -227,6 +229,12 @@ async function main(): Promise<void> {
   const releaseFlag = args.includes("--release");
   const noPRsFlag = args.includes("--no-prs");
   const groupedFlag = args.includes("--grouped");
+  const singleFlag = args.includes("--single");
+
+  if (groupedFlag && singleFlag) {
+    console.error("Error: --grouped and --single cannot be used together");
+    process.exit(1);
+  }
 
   // Parse language flag
   let languageValue: "english" | "german" = "english";
@@ -291,7 +299,8 @@ async function main(): Promise<void> {
     } else if (action === "stage") {
       await stage({ autoYes: yesFlag });
     } else if (action === "commit") {
-      await commit({ autoYes: yesFlag, singleCommit: !groupedFlag });
+      const singleCommit = groupedFlag ? false : singleFlag ? true : undefined;
+      await commit({ autoYes: yesFlag, singleCommit });
     } else if (action === "pr") {
       await prSuggest({ autoYes: yesFlag });
     } else if (action === "release") {

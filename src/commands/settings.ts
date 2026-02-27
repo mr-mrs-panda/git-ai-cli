@@ -24,11 +24,18 @@ const REASONING_LEVELS: Array<{ value: ReasoningEffort; label: string; hint: str
 
 async function showCurrentConfig(): Promise<void> {
   const config = await loadConfig();
+  const preferences = config.preferences;
+  const commitPreferences = preferences?.commit;
+  const prPreferences = preferences?.pullRequest;
 
   p.note(
     `  Model: ${config.model || "gpt-5.2"}\n` +
     `  Reasoning Effort: ${config.reasoningEffort || "low"}\n` +
     `  Temperature: ${config.temperature || 1}\n` +
+    `  Commit Default Mode: ${(commitPreferences?.defaultMode ?? "grouped")}\n` +
+    `  Commit Always Stage All: ${(commitPreferences?.alwaysStageAll ?? true) ? "Yes" : "No"}\n` +
+    `  Commit -y Auto Push: ${(commitPreferences?.autoPushOnYes ?? false) ? "Yes" : "No"}\n` +
+    `  Pull Requests As Draft: ${(prPreferences?.createAsDraft ?? true) ? "Yes" : "No"}\n` +
     `  API Key: ${config.openaiApiKey ? "***" + config.openaiApiKey.slice(-4) : "Not set"}`,
     "Current Settings"
   );
@@ -48,6 +55,10 @@ export async function settings(): Promise<void> {
         { value: "model", label: "AI Model", hint: "Change the GPT model" },
         { value: "reasoning", label: "Reasoning Effort", hint: "Adjust reasoning depth" },
         { value: "temperature", label: "Temperature", hint: "Creativity vs consistency" },
+        { value: "commitMode", label: "Commit Default Mode", hint: "Single or grouped commits" },
+        { value: "commitStageAll", label: "Commit Always Stage All", hint: "Include all changes automatically" },
+        { value: "commitAutoPushOnYes", label: "Commit -y Auto Push", hint: "Auto-push when using --yes" },
+        { value: "prDraft", label: "PR Draft Default", hint: "Create pull requests as draft by default" },
         { value: "apiKey", label: "API Key", hint: "Update OpenAI API key" },
         { value: "view", label: "View Config File", hint: "Show config file location" },
         { value: "reset", label: "Reset to Defaults", hint: "Restore default settings" },
@@ -122,6 +133,90 @@ export async function settings(): Promise<void> {
         break;
       }
 
+      case "commitMode": {
+        const mode = await p.select({
+          message: "Default commit mode:",
+          options: [
+            { value: "grouped", label: "Grouped", hint: "Create multiple logical commits by default" },
+            { value: "single", label: "Single", hint: "Create one commit by default" },
+          ],
+          initialValue: config.preferences?.commit.defaultMode || "grouped",
+        });
+
+        if (p.isCancel(mode)) {
+          continue;
+        }
+
+        updates.preferences = {
+          ...config.preferences,
+          commit: {
+            ...config.preferences?.commit,
+            defaultMode: mode as "grouped" | "single",
+          },
+        };
+        break;
+      }
+
+      case "commitStageAll": {
+        const alwaysStage = await p.confirm({
+          message: "Should commit always stage all changes first?",
+          initialValue: config.preferences?.commit.alwaysStageAll ?? true,
+        });
+
+        if (p.isCancel(alwaysStage)) {
+          continue;
+        }
+
+        updates.preferences = {
+          ...config.preferences,
+          commit: {
+            ...config.preferences?.commit,
+            alwaysStageAll: alwaysStage,
+          },
+        };
+        break;
+      }
+
+      case "commitAutoPushOnYes": {
+        const autoPush = await p.confirm({
+          message: "Should `commit -y` always push automatically?",
+          initialValue: config.preferences?.commit.autoPushOnYes ?? false,
+        });
+
+        if (p.isCancel(autoPush)) {
+          continue;
+        }
+
+        updates.preferences = {
+          ...config.preferences,
+          commit: {
+            ...config.preferences?.commit,
+            autoPushOnYes: autoPush,
+          },
+        };
+        break;
+      }
+
+      case "prDraft": {
+        const prAsDraft = await p.confirm({
+          message: "Create new pull requests as draft by default?",
+          initialValue: config.preferences?.pullRequest.createAsDraft ?? true,
+        });
+
+        if (p.isCancel(prAsDraft)) {
+          continue;
+        }
+
+        updates.preferences = {
+          ...config.preferences,
+          pullRequest: {
+            ...config.preferences?.pullRequest,
+            createAsDraft: prAsDraft,
+          },
+        };
+        break;
+      }
+
       case "apiKey": {
         const apiKey = await p.text({
           message: "Enter your OpenAI API key:",
@@ -151,7 +246,7 @@ export async function settings(): Promise<void> {
 
       case "reset": {
         const confirm = await p.confirm({
-          message: "Reset all settings to defaults? (API key will be kept)",
+          message: "Reset all settings to defaults? (API key and GitHub token will be kept)",
           initialValue: false,
         });
 
@@ -161,9 +256,20 @@ export async function settings(): Promise<void> {
 
         await updateConfig({
           openaiApiKey: config.openaiApiKey, // Keep API key
+          githubToken: config.githubToken, // Keep GitHub token
           model: "gpt-5.2",
           temperature: 1,
           reasoningEffort: "low",
+          preferences: {
+            commit: {
+              alwaysStageAll: true,
+              defaultMode: "grouped",
+              autoPushOnYes: false,
+            },
+            pullRequest: {
+              createAsDraft: true,
+            },
+          },
         });
 
         p.note("Settings have been reset to defaults", "✓ Reset Complete");

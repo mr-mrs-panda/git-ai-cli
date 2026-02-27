@@ -100,7 +100,17 @@ Configuration is stored in `~/.config/git-ai/config.json`:
   "githubToken": "ghp-your-github-token-here",
   "model": "gpt-5.2",
   "temperature": 1,
-  "reasoningEffort": "low"
+  "reasoningEffort": "low",
+  "preferences": {
+    "commit": {
+      "alwaysStageAll": true,
+      "defaultMode": "grouped",
+      "autoPushOnYes": false
+    },
+    "pullRequest": {
+      "createAsDraft": true
+    }
+  }
 }
 ```
 
@@ -126,6 +136,8 @@ This allows you to:
 - Change AI model (GPT-5.2, GPT-5.2 Pro, GPT-5.1, o3, etc.)
 - Adjust reasoning effort (none, low, medium, high, xhigh)
 - Update temperature
+- Configure commit behavior (grouped/single, always stage all, `commit -y` auto-push)
+- Configure pull request behavior (draft by default or not)
 - Change your API key
 - Reset to defaults
 
@@ -136,6 +148,10 @@ This allows you to:
 | `model` | AI model to use | `gpt-5.2` | See available models below |
 | `reasoningEffort` | Reasoning depth | `low` | `none`, `low`, `medium`, `high`, `xhigh` |
 | `temperature` | Creativity vs consistency | `1` | `0.0` - `2.0` |
+| `preferences.commit.defaultMode` | Default commit mode | `grouped` | `grouped`, `single` |
+| `preferences.commit.alwaysStageAll` | Always stage all changes before commit | `true` | `true`, `false` |
+| `preferences.commit.autoPushOnYes` | Auto-push on `commit -y` / `auto -y` | `false` | `true`, `false` |
+| `preferences.pullRequest.createAsDraft` | Create PRs as draft by default | `true` | `true`, `false` |
 | `openaiApiKey` | Your OpenAI API key | - | `sk-...` |
 | `githubToken` | GitHub token for PR/release features | - | `ghp-...` or `GITHUB_TOKEN` env var |
 
@@ -199,6 +215,8 @@ git-ai auto --release  # Release mode: full workflow + merge + release
 git-ai prepare         # Prepare for new feature
 git-ai branch          # Create branch from changes
 git-ai commit          # Generate commit message
+git-ai commit --single # Force single-commit mode
+git-ai commit --grouped # Force grouped-commit mode
 git-ai pr              # Generate PR suggestion
 git-ai release         # Create a GitHub release (includes PRs by default)
 git-ai release --no-prs  # Create release without PR info
@@ -231,10 +249,10 @@ git-ai auto --release
 
 **What it does:**
 1. If you're on `main`/`master`: Creates a new branch based on your changes
-2. Stages all changes
+2. Stages and commits based on your commit settings
 3. Generates and commits with AI
 4. Pushes to origin
-5. Creates a GitHub Pull Request
+5. Creates a GitHub Pull Request (draft behavior from settings)
 
 **Blind Mode (`-y` or `--yes` flag):**
 - Auto-accepts all prompts without user confirmation

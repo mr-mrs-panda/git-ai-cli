@@ -2,6 +2,18 @@ import { join } from "path";
 import { mkdir } from "fs/promises";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export type CommitMode = "single" | "grouped";
+
+export interface UserPreferences {
+  commit: {
+    alwaysStageAll: boolean;
+    defaultMode: CommitMode;
+    autoPushOnYes: boolean;
+  };
+  pullRequest: {
+    createAsDraft: boolean;
+  };
+}
 
 export interface Config {
   openaiApiKey?: string;
@@ -9,13 +21,55 @@ export interface Config {
   model?: string;
   temperature?: number;
   reasoningEffort?: ReasoningEffort;
+  preferences?: UserPreferences;
 }
 
 const DEFAULT_CONFIG: Config = {
   model: "gpt-5.2",
   temperature: 1,
   reasoningEffort: "low",
+  preferences: {
+    commit: {
+      alwaysStageAll: true,
+      defaultMode: "grouped",
+      autoPushOnYes: false,
+    },
+    pullRequest: {
+      createAsDraft: true,
+    },
+  },
 };
+
+function getDefaultPreferences(): UserPreferences {
+  const preferences = DEFAULT_CONFIG.preferences;
+  if (!preferences) {
+    throw new Error("Default preferences are missing");
+  }
+
+  return structuredClone(preferences);
+}
+
+function mergeConfigWithDefaults(config: Partial<Config>): Config {
+  const defaultPreferences = getDefaultPreferences();
+  const configPreferences = config.preferences;
+
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+    preferences: {
+      ...defaultPreferences,
+      ...configPreferences,
+      commit: {
+        ...defaultPreferences.commit,
+        ...(configPreferences?.commit || {}),
+      },
+      pullRequest: {
+        ...defaultPreferences.pullRequest,
+        ...(configPreferences?.pullRequest || {}),
+      },
+    },
+  };
+}
 
 /**
  * Get the config directory path
@@ -64,20 +118,16 @@ export async function loadConfig(): Promise<Config> {
     const exists = await file.exists();
 
     if (!exists) {
-      return { ...DEFAULT_CONFIG };
+      return mergeConfigWithDefaults({});
     }
 
     const content = await file.text();
     const config = JSON.parse(content) as Config;
 
-    // Merge with defaults
-    return {
-      ...DEFAULT_CONFIG,
-      ...config,
-    };
+    return mergeConfigWithDefaults(config);
   } catch (error) {
     // If file doesn't exist or is invalid, return defaults
-    return { ...DEFAULT_CONFIG };
+    return mergeConfigWithDefaults({});
   }
 }
 
@@ -98,10 +148,22 @@ export async function saveConfig(config: Config): Promise<void> {
  */
 export async function updateConfig(updates: Partial<Config>): Promise<Config> {
   const config = await loadConfig();
-  const newConfig = {
+  const newConfig = mergeConfigWithDefaults({
     ...config,
     ...updates,
-  };
+    preferences: {
+      ...config.preferences,
+      ...updates.preferences,
+      commit: {
+        ...(config.preferences?.commit || {}),
+        ...(updates.preferences?.commit || {}),
+      },
+      pullRequest: {
+        ...(config.preferences?.pullRequest || {}),
+        ...(updates.preferences?.pullRequest || {}),
+      },
+    },
+  });
 
   await saveConfig(newConfig);
   return newConfig;

@@ -5,9 +5,9 @@ import {
     getCurrentBranch,
     getBaseBranch,
     getAllChanges,
-    stageAllChanges,
 } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
+import { loadConfig } from "../utils/config.ts";
 import { Spinner } from "../utils/ui.ts";
 
 export interface PrepareOptions {
@@ -53,6 +53,11 @@ export interface PrepareOptions {
  */
 export async function prepare(options: PrepareOptions = {}): Promise<void> {
     const { autoYes = false } = options;
+    const config = await loadConfig();
+    const commitPreferences = config.preferences?.commit;
+
+    const singleCommit = (commitPreferences?.defaultMode ?? "grouped") === "single";
+    const alwaysStageAll = commitPreferences?.alwaysStageAll ?? true;
 
     // Check if we're in a git repository
     const isRepo = await isGitRepository();
@@ -162,6 +167,8 @@ export async function prepare(options: PrepareOptions = {}): Promise<void> {
                 spinner.start("Generating commit message...");
                 const commitMessage = await generateAndCommit({
                     confirmBeforeCommit: false, // auto-commit since user already chose to commit
+                    singleCommit,
+                    alwaysStageAll,
                 });
 
                 if (!commitMessage) {

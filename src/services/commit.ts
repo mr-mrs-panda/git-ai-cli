@@ -39,6 +39,12 @@ export interface CommitOptions {
    * @default false
    */
   autoYes?: boolean;
+
+  /**
+   * Stage all working tree changes before creating commits.
+   * @default false
+   */
+  alwaysStageAll?: boolean;
 }
 
 export interface CommitResult {
@@ -321,22 +327,28 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
  * Single-commit workflow with feedback loop
  */
 async function generateAndCommitSingle(options: CommitOptions = {}): Promise<string | null> {
-  const { confirmBeforeCommit = true, spinner: externalSpinner, autoYes = false } = options;
+  const { confirmBeforeCommit = true, spinner: externalSpinner, autoYes = false, alwaysStageAll = false } = options;
   const spinner = new Spinner(externalSpinner);
 
   try {
-    // Check if there are already staged changes
-    spinner.start("Checking for staged changes...");
-    const stagedChanges = await getStagedChanges();
-
-    if (stagedChanges.length === 0) {
-      // No staged changes - stage all changes
-      spinner.message("No staged changes found, staging all changes...");
+    if (alwaysStageAll) {
+      spinner.start("Staging all changes...");
       await stageAllChanges();
       spinner.stop("All changes staged");
     } else {
-      // Use only staged changes
-      spinner.stop(`Found ${stagedChanges.length} staged file(s)`);
+      // Check if there are already staged changes
+      spinner.start("Checking for staged changes...");
+      const stagedChanges = await getStagedChanges();
+
+      if (stagedChanges.length === 0) {
+        // No staged changes - stage all changes
+        spinner.message("No staged changes found, staging all changes...");
+        await stageAllChanges();
+        spinner.stop("All changes staged");
+      } else {
+        // Use only staged changes
+        spinner.stop(`Found ${stagedChanges.length} staged file(s)`);
+      }
     }
 
     // Get staged changes to analyze

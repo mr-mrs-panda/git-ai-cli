@@ -1,7 +1,7 @@
 import * as p from "@clack/prompts";
-import { Octokit } from "octokit";
-import { getBranchInfo, isGitRepository, isGitHubRepository, parseGitHubRepo, isBranchPushed, pushToOrigin, getBaseBranch, getCurrentBranch } from "../utils/git.ts";
+import { getBranchInfo, isGitRepository, isGitHubRepository, getBaseBranch, getCurrentBranch } from "../utils/git.ts";
 import { generatePRSuggestion } from "../utils/openai.ts";
+import { loadConfig } from "../utils/config.ts";
 import { Spinner } from "../utils/ui.ts";
 
 export interface PrSuggestOptions {
@@ -10,6 +10,14 @@ export interface PrSuggestOptions {
 
 export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
   const { autoYes = false } = options;
+  const config = await loadConfig();
+  const preferences = config.preferences;
+  const commitPreferences = preferences?.commit;
+  const prPreferences = preferences?.pullRequest;
+
+  const singleCommit = (commitPreferences?.defaultMode ?? "grouped") === "single";
+  const alwaysStageAll = commitPreferences?.alwaysStageAll ?? true;
+  const createDraftPR = prPreferences?.createAsDraft ?? true;
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -87,6 +95,8 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
     const { generateAndCommit } = await import("../services/commit.ts");
     const commitMessage = await generateAndCommit({
       confirmBeforeCommit: !autoYes,
+      singleCommit,
+      alwaysStageAll,
     });
 
     if (!commitMessage) {
@@ -299,7 +309,7 @@ export async function prSuggest(options: PrSuggestOptions = {}): Promise<void> {
         spinner.start("Regenerating PR with your feedback...");
         // Continue the loop
       } else if (action === "create-pr") {
-        await createGitHubPR(title, description, currentBranch, autoYes);
+        await createGitHubPR(title, description, currentBranch, autoYes, createDraftPR);
         continueLoop = false;
       } else if (action === "update-pr") {
         if (existingPR) {
@@ -381,7 +391,13 @@ async function copyToClipboard(text: string): Promise<void> {
 /**
  * Create a GitHub Pull Request
  */
-async function createGitHubPR(title: string, description: string, currentBranch: string, autoYes: boolean = false): Promise<void> {
+async function createGitHubPR(
+  title: string,
+  description: string,
+  currentBranch: string,
+  autoYes: boolean = false,
+  draft: boolean = true
+): Promise<void> {
   const { ensureBranchPushed, ensureGitHubToken, getGitHubRepoInfo, createGitHubPullRequest } = await import("../services/github.ts");
 
   // Ensure branch is pushed
@@ -417,6 +433,7 @@ async function createGitHubPR(title: string, description: string, currentBranch:
     repo: repoInfo.repo,
     githubToken,
     autoYes,
+    draft,
   });
 }
 

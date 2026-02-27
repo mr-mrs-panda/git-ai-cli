@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { isGitRepository, hasOriginRemote, addOriginRemote, pushToOrigin } from "../utils/git.ts";
 import { generateAndCommit } from "../services/commit.ts";
+import { loadConfig } from "../utils/config.ts";
 import { Spinner } from "../utils/ui.ts";
 
 export interface CommitCommandOptions {
@@ -9,7 +10,7 @@ export interface CommitCommandOptions {
 }
 
 export async function commit(options: CommitCommandOptions = {}): Promise<void> {
-  const { autoYes = false, singleCommit = true } = options;
+  const { autoYes = false, singleCommit } = options;
 
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
@@ -18,7 +19,15 @@ export async function commit(options: CommitCommandOptions = {}): Promise<void> 
   }
 
   // Show mode info
-  if (!singleCommit) {
+  const config = await loadConfig();
+  const preferences = config.preferences;
+  const commitPreferences = preferences?.commit;
+
+  const resolvedSingleCommit = singleCommit ?? (commitPreferences?.defaultMode === "single");
+  const alwaysStageAll = commitPreferences?.alwaysStageAll ?? true;
+  const autoPushOnYes = commitPreferences?.autoPushOnYes ?? false;
+
+  if (!resolvedSingleCommit) {
     p.log.info("Grouped commit mode enabled");
   }
 
@@ -28,8 +37,9 @@ export async function commit(options: CommitCommandOptions = {}): Promise<void> 
   const result = await generateAndCommit({
     confirmBeforeCommit: true,
     spinner: spinner.getUnderlyingSpinner(),
-    singleCommit,
+    singleCommit: resolvedSingleCommit,
     autoYes,
+    alwaysStageAll,
   });
 
   if (!result) {
@@ -54,7 +64,12 @@ export async function commit(options: CommitCommandOptions = {}): Promise<void> 
 
     shouldPush = response;
   } else {
-    p.log.info("Auto-accepting: Skipping push (commit-only mode)");
+    shouldPush = autoPushOnYes;
+    p.log.info(
+      shouldPush
+        ? "Auto-accepting: Pushing based on your settings"
+        : "Auto-accepting: Skipping push based on your settings"
+    );
   }
 
   if (shouldPush) {
