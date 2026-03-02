@@ -271,7 +271,7 @@ Commits:
 ${commitsText}${prsText}
 
 Format requirements:
-- title: short release title
+- title: short release title that starts with "${version} " followed by a descriptive name (e.g. "${version} Security Hardening & Performance Improvements")
 - notes: markdown with sections for Features, Bug Fixes, Changes, Docs, Chores where applicable`;
 
   return invokeStructured("release", prompt, releaseNotesSchema);
