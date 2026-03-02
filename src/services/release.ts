@@ -317,7 +317,9 @@ export async function createRelease(options: ReleaseOptions = {}): Promise<Relea
       commits.map((c) => ({ message: c.message, author: c.author, date: c.date })),
       pullRequests.length > 0 ? pullRequests : undefined
     );
-    releaseTitle = result.title;
+    releaseTitle = result.title.startsWith(newVersionTag)
+      ? result.title
+      : `${newVersionTag} ${result.title}`;
     releaseNotes = result.notes;
     spinner.stop("Release notes generated");
   } catch (error) {
