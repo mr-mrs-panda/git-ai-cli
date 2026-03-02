@@ -54,14 +54,6 @@ jobs:
           fi
         shell: bash
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: git-ai-ubuntu-latest
-          path: |
-            ./git-ai-cli
-            ./git-ai-cli.exe
-          if-no-files-found: error
 
   typecheck:
     name: Typecheck
