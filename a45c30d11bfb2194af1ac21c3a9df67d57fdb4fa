@@ -1,0 +1,23 @@
+src/utils/openai.ts
+  2099c55b8708cd85 274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.7",
+  "base_commit_sha": "a45c30d11bfb2194af1ac21c3a9df67d57fdb4fa",
+  "prompts": {
+    "2099c55b8708cd85": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e047d0f0-6c07-4ff1-be6c-d377ca80c07f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Patrick Knäpel <patrick.knaepel@pandaliebe.de>",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 2,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    }
+  }
+}
