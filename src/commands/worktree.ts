@@ -26,6 +26,17 @@ export function sanitizeDirectorySegment(input: string): string {
     .replace(/^[-._]+|[-._]+$/g, "");
 }
 
+async function openShellInDirectory(path: string): Promise<void> {
+  const shell = process.env.SHELL || "bash";
+  const proc = Bun.spawn([shell], {
+    cwd: path,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  await proc.exited;
+}
+
 export async function createWorktreeCommand(options: WorktreeOptions = {}): Promise<void> {
   const { autoYes = false } = options;
   const spinner = new Spinner();
@@ -130,4 +141,12 @@ export async function createWorktreeCommand(options: WorktreeOptions = {}): Prom
     `Branch: ${branchName}\nPath: ${worktreePath}\nBase: main`,
     "Worktree Created"
   );
+
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    p.log.info(`Opening shell in '${worktreePath}'...`);
+    await openShellInDirectory(worktreePath);
+    return;
+  }
+
+  p.note(`Run this command to switch:\ncd ${worktreePath}`, "Next Step");
 }

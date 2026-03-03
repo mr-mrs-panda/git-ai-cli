@@ -96,3 +96,4 @@ Large parts of this repository were generated with AI assistance, primarily usin
 I am aware that AI-generated code can be risky or incorrect in subtle ways. I have done my best to review every single line of code in this repository before shipping changes.
 
 For full command, configuration, and workflow details, use the [docs index](./docs/README.md).
+
