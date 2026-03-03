@@ -153,14 +153,14 @@ const groupingSchema = z.object({
   groups: z.array(z.object({
     id: z.number().int().positive(),
     type: z.string().min(1),
-    scope: z.string().optional(),
+    scope: z.string().nullable(),
     description: z.string().min(1),
-    reasoning: z.string().default(""),
-    files: z.array(z.string()).default([]),
-    dependencies: z.array(z.number().int().positive()).default([]),
+    reasoning: z.string().nullable(),
+    files: z.array(z.string()),
+    dependencies: z.array(z.number().int().positive()),
     commitHeader: z.string().min(1),
-    commitBody: z.string().optional(),
-    commitFooter: z.string().optional(),
+    commitBody: z.string().nullable(),
+    commitFooter: z.string().nullable(),
   })).min(1),
   totalGroups: z.number().int().positive(),
 });
@@ -198,14 +198,14 @@ ${changesText}`;
   const groups = result.groups.slice(0, 10).map((g, idx) => ({
     id: g.id || idx + 1,
     type: g.type,
-    scope: g.scope,
+    scope: g.scope ?? undefined,
     description: g.description,
-    reasoning: g.reasoning,
-    files: g.files,
-    dependencies: g.dependencies,
+    reasoning: g.reasoning ?? "",
+    files: g.files ?? [],
+    dependencies: g.dependencies ?? [],
     commitHeader: g.commitHeader,
-    commitBody: g.commitBody,
-    commitFooter: g.commitFooter,
+    commitBody: g.commitBody ?? undefined,
+    commitFooter: g.commitFooter ?? undefined,
   }));
 
   return { groups, totalGroups: groups.length };
