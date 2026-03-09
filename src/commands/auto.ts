@@ -35,6 +35,10 @@ export interface AutoOptions {
    * @default false
    */
   release?: boolean;
+  /**
+   * Optional user-provided context for branch, commit, and PR generation
+   */
+  reason?: string;
 }
 
 /**
@@ -262,6 +266,7 @@ async function createPullRequest(
   baseBranch: string,
   spinner: Spinner,
   autoYes: boolean,
+  reason?: string,
   yolo: boolean = false,
   draft: boolean = true
 ): Promise<{ prNumber?: number; owner?: string; repo?: string }> {
@@ -286,7 +291,10 @@ async function createPullRequest(
   const { title, description } = await generatePRSuggestion(
     workingBranch,
     branchInfo.commits.map((c) => ({ message: c.message })),
-    diffs.length > 0 ? diffs : undefined
+    diffs.length > 0 ? diffs : undefined,
+    undefined,
+    undefined,
+    reason
   );
   spinner.stop("PR suggestion generated");
 
@@ -354,7 +362,7 @@ async function createPullRequest(
  * 4. Create PR (if GitHub repo)
  */
 export async function auto(options: AutoOptions = {}): Promise<void> {
-  const { autoYes = false, yolo = false, release = false } = options;
+  const { autoYes = false, yolo = false, release = false, reason } = options;
   // Release mode implies yolo (merge & delete), but NOT autoYes
   const effectiveYolo = release || yolo;
   const effectiveAutoYes = autoYes; // Only explicit --yes flag enables autoYes
@@ -398,7 +406,8 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
         `Branch: ${currentBranch}\n` +
         `Base: ${baseBranch}\n` +
         `Status: Already pushed\n` +
-        `Has changes: No`,
+        `Has changes: No` +
+        (reason ? `\nReason: ${reason}` : ""),
         "Current State"
       );
 
@@ -441,7 +450,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
         if (shouldCreatePR) {
           // Jump directly to PR creation
           p.log.step("Creating Pull Request");
-          const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo, createDraftPR);
+          const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, reason, effectiveYolo, createDraftPR);
 
           // If yolo mode, merge the PR and delete the branch
           if (effectiveYolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
@@ -472,7 +481,8 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   p.note(
     `Branch: ${currentBranch}\n` +
     `Base: ${baseBranch}\n` +
-    `Has changes: Yes`,
+    `Has changes: Yes` +
+    (reason ? `\nReason: ${reason}` : ""),
     "Current State"
   );
 
@@ -484,7 +494,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
     const { createBranch } = await import("./create-branch.ts");
 
     try {
-      await createBranch({ autoYes: effectiveAutoYes });
+      await createBranch({ autoYes: effectiveAutoYes, reason });
       // Get the new branch name after creation
       workingBranch = await getCurrentBranch();
     } catch (error) {
@@ -503,6 +513,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
     autoYes: effectiveAutoYes,
     singleCommit,
     alwaysStageAll,
+    reason,
   });
 
   if (!commitMessage) {
@@ -595,7 +606,7 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
   }
 
   // Use the helper function to create the PR
-  const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, effectiveYolo, createDraftPR);
+  const prInfo = await createPullRequest(workingBranch, baseBranch, spinner, effectiveAutoYes, reason, effectiveYolo, createDraftPR);
 
   // If yolo mode, merge the PR and delete the branch
   if (effectiveYolo && prInfo.prNumber && prInfo.owner && prInfo.repo) {
