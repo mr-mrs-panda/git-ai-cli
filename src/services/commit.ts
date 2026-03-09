@@ -45,6 +45,11 @@ export interface CommitOptions {
    * @default false
    */
   alwaysStageAll?: boolean;
+
+  /**
+   * Optional user-provided context for commit generation
+   */
+  reason?: string;
 }
 
 export interface CommitResult {
@@ -89,7 +94,7 @@ export async function generateAndCommit(options: CommitOptions = {}): Promise<st
  * Multi-commit workflow: analyze, group, and create multiple logical commits
  */
 async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<CommitResult | null> {
-  const { confirmBeforeCommit = true, spinner: externalSpinner, autoYes = false } = options;
+  const { confirmBeforeCommit = true, spinner: externalSpinner, autoYes = false, reason } = options;
   const spinner = new Spinner(externalSpinner);
 
   try {
@@ -140,7 +145,8 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
         status: c.status,
         diff: c.skipped ? `[File skipped: ${c.skipReason}]` : c.diff,
       })),
-      currentBranch
+      currentBranch,
+      reason
     );
     spinner.stop(`Identified ${groupingResult.totalGroups} logical group(s)`);
 
@@ -326,7 +332,7 @@ async function generateAndCommitMultiple(options: CommitOptions = {}): Promise<C
  * Single-commit workflow with feedback loop
  */
 async function generateAndCommitSingle(options: CommitOptions = {}): Promise<string | null> {
-  const { confirmBeforeCommit = true, spinner: externalSpinner, autoYes = false, alwaysStageAll = false } = options;
+  const { confirmBeforeCommit = true, spinner: externalSpinner, autoYes = false, alwaysStageAll = false, reason } = options;
   const spinner = new Spinner(externalSpinner);
 
   try {
@@ -394,7 +400,8 @@ async function generateAndCommitSingle(options: CommitOptions = {}): Promise<str
           diff: c.diff,
         })),
         currentBranch,
-        userFeedback
+        userFeedback,
+        reason
       );
       spinner.stop("Message generated");
 
