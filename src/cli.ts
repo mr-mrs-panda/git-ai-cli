@@ -44,6 +44,7 @@ Options:
   -h, --help            Show this help message
   -v, --version         Show version
   -y, --yes             Auto-accept all prompts (blind mode)
+  --reason <text>       Extra context for AI prompts (auto command)
   --grouped             Force grouped commits (commit command only)
   --single              Force a single commit (commit command only)
   --yolo                YOLO mode: auto-merge PR and delete branch
@@ -55,6 +56,7 @@ Examples:
   git-ai              # Interactive mode
   git-ai auto         # Smart workflow
   git-ai auto -y      # Auto mode with all prompts auto-accepted
+  git-ai auto -y "bug fixed in order sync"  # Add reason/context for AI output
   git-ai auto --yolo  # YOLO mode: auto-merge PR and delete branch
   git-ai auto --release  # Full release workflow: commit → PR → merge → release
   git-ai prepare      # Prepare for a new feature
@@ -363,6 +365,7 @@ async function main(): Promise<void> {
   const noPRsFlag = args.includes("--no-prs");
   const groupedFlag = args.includes("--grouped");
   const singleFlag = args.includes("--single");
+  const reasonFlagIndex = args.findIndex(arg => arg === "--reason" || arg.startsWith("--reason="));
 
   if (groupedFlag && singleFlag) {
     console.error("Error: --grouped and --single cannot be used together");
@@ -389,6 +392,25 @@ async function main(): Promise<void> {
     }
   }
 
+  let reasonValue: string | undefined;
+  if (reasonFlagIndex !== -1) {
+    const reasonArg = args[reasonFlagIndex];
+    if (reasonArg?.startsWith("--reason=")) {
+      const value = reasonArg.slice("--reason=".length).trim();
+      if (value) {
+        reasonValue = value;
+      }
+    } else {
+      const nextArg = args[reasonFlagIndex + 1];
+      if (nextArg && !nextArg.startsWith("-")) {
+        const value = nextArg.trim();
+        if (value) {
+          reasonValue = value;
+        }
+      }
+    }
+  }
+
   // Filter out flags to get the command
   // Also filter out language value if it follows --language flag
   const commandArgs = args.filter((arg, index) => {
@@ -396,6 +418,7 @@ async function main(): Promise<void> {
     // Check if previous arg was --language
     const prevArg = args[index - 1];
     if (prevArg === "--language") return false;
+    if (prevArg === "--reason") return false;
     return true;
   });
 
@@ -424,7 +447,13 @@ async function main(): Promise<void> {
   // Execute the command
   try {
     if (action === "auto") {
-      await auto({ autoYes: yesFlag, yolo: yoloFlag, release: releaseFlag });
+      const positionalReason = commandArgs.slice(1).join(" ").trim();
+      await auto({
+        autoYes: yesFlag,
+        yolo: yoloFlag,
+        release: releaseFlag,
+        reason: reasonValue ?? (positionalReason || undefined),
+      });
     } else if (action === "prepare") {
       await prepare({ autoYes: yesFlag });
     } else if (action === "branch") {
