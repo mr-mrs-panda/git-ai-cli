@@ -21,6 +21,8 @@ git-ai
 ```bash
 git-ai auto
 git-ai auto -y
+git-ai auto -y "bug fixed that prevented orders from syncing"
+git-ai auto --reason "hotfix for failed order transfer"
 git-ai auto --yolo
 git-ai auto --release
 git-ai prepare

@@ -16,6 +16,8 @@
 ```bash
 git-ai auto
 git-ai auto -y
+git-ai auto -y "bug fixed that prevented orders from syncing"
+git-ai auto --reason "hotfix for failed order transfer"
 git-ai auto --yolo
 git-ai auto --release
 ```
@@ -28,6 +30,11 @@ git-ai auto --release
 2. Stages and commits based on commit preferences
 3. Pushes branch to origin
 4. Creates GitHub PR (draft behavior from settings)
+
+You can optionally pass a free-text reason. `git-ai auto -y "bug fixed ..."` or
+`git-ai auto --reason "bug fixed ..."` feeds that context into branch, commit,
+and PR generation so the AI can better distinguish intent such as `bugfix`
+versus `refactor`.
 
 ## Blind Mode
 

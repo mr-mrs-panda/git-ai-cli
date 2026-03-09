@@ -4,7 +4,8 @@ import { invokeStructured, invokeText } from "./llm.ts";
 export async function generateCommitMessage(
   changes: Array<{ path: string; status: string; diff: string }>,
   branchName?: string,
-  feedback?: string
+  feedback?: string,
+  reason?: string
 ): Promise<string> {
   const changesText = changes
     .map((change) => `File: ${change.path} (${change.status})\n${change.diff}\n`)
@@ -16,6 +17,10 @@ export async function generateCommitMessage(
 
   const feedbackSection = feedback
     ? `\n\nUSER FEEDBACK ON PREVIOUS VERSION:\n${feedback}\n\nIMPORTANT: Address the user's feedback and regenerate the commit message accordingly.\n`
+    : "";
+
+  const reasonSection = reason
+    ? `\n\nUSER-PROVIDED CONTEXT:\n${reason}\n\nIMPORTANT: Use this as intent/rationale context when choosing the commit type, wording, and emphasis. Do not ignore the actual code changes.\n`
     : "";
 
   const prompt = `You are an expert at writing meaningful git commit messages following Conventional Commits specification.
@@ -42,7 +47,7 @@ A commit message consists of three parts separated by blank lines:
    - Other metadata
 
 Git changes:
-${changesText}${feedbackSection}
+${changesText}${feedbackSection}${reasonSection}
 
 IMPORTANT: Generate ONLY the commit message.`;
 
@@ -59,7 +64,8 @@ export async function generatePRSuggestion(
   commits: Array<{ message: string }>,
   diffs?: Array<{ path: string; status: string; diff: string }>,
   feedback?: string,
-  existingPR?: { title: string; body: string | null }
+  existingPR?: { title: string; body: string | null },
+  reason?: string
 ): Promise<{ title: string; description: string }> {
   const commitsText = commits.map((c, i) => `${i + 1}. ${c.message}`).join("\n");
   const diffsText = diffs && diffs.length > 0
@@ -74,12 +80,16 @@ export async function generatePRSuggestion(
     ? `\n\nUSER FEEDBACK:\n${feedback}\nAddress this feedback in the regenerated output.`
     : "";
 
+  const reasonSection = reason
+    ? `\n\nUSER-PROVIDED CONTEXT:\n${reason}\nUse this to better capture the intent, business impact, and likely change category in the PR title and description.`
+    : "";
+
   const prompt = `Generate a professional pull request title and markdown description.
 
 Branch name: ${branchName}
 
 Commits:
-${commitsText}${diffsText}${existingPRSection}${feedbackSection}
+${commitsText}${diffsText}${existingPRSection}${feedbackSection}${reasonSection}
 
 Rules:
 - Title max 72 chars
@@ -99,7 +109,8 @@ const branchSchema = z.object({
 
 export async function generateBranchName(
   changes: Array<{ path: string; status: string; diff: string }>,
-  feedback?: string
+  feedback?: string,
+  reason?: string
 ): Promise<{ name: string; type: "feature" | "bugfix" | "chore" | "refactor"; description: string }> {
   const changesText = changes
     .map((change) => `File: ${change.path} (${change.status})\n${change.diff}\n`)
@@ -107,6 +118,10 @@ export async function generateBranchName(
 
   const feedbackSection = feedback
     ? `\n\nUSER FEEDBACK:\n${feedback}\nAddress this feedback.`
+    : "";
+
+  const reasonSection = reason
+    ? `\n\nUSER-PROVIDED CONTEXT:\n${reason}\nUse this to infer the most appropriate branch category when it clarifies intent (for example bugfix vs refactor).`
     : "";
 
   const prompt = `Analyze git changes and suggest a branch name.
@@ -117,7 +132,7 @@ Rules:
 - Keep concise (max 50 chars)
 
 Changes:
-${changesText}${feedbackSection}`;
+${changesText}${feedbackSection}${reasonSection}`;
 
   const result = await invokeStructured("branch", prompt, branchSchema, {
     reasoningEffort: "none",
@@ -167,7 +182,8 @@ const groupingSchema = z.object({
 
 export async function analyzeAndPlanGroupedCommits(
   changes: Array<{ path: string; status: string; diff: string }>,
-  branchName?: string
+  branchName?: string,
+  reason?: string
 ): Promise<GroupingResult> {
   const changesText = changes
     .map((change, i) => `File ${i + 1}: ${change.path} (${change.status})\n${change.diff}\n`)
@@ -177,9 +193,13 @@ export async function analyzeAndPlanGroupedCommits(
     ? `Branch name: ${branchName}\nConsider branch context while grouping.\n\n`
     : "";
 
+  const reasonSection = reason
+    ? `User-provided context: ${reason}\nUse this context when deciding whether changes represent a fix, feature, refactor, or chore, but keep the grouping grounded in the actual diffs.\n\n`
+    : "";
+
   const prompt = `Group these file changes into logical, atomic conventional commits.
 
-${branchContext}
+${branchContext}${reasonSection}
 Rules:
 - 1..10 groups
 - Keep feature, refactor, docs, test separated where meaningful

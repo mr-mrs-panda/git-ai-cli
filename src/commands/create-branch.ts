@@ -5,10 +5,11 @@ import { Spinner } from "../utils/ui.ts";
 
 export interface CreateBranchOptions {
   autoYes?: boolean;
+  reason?: string;
 }
 
 export async function createBranch(options: CreateBranchOptions = {}): Promise<void> {
-  const { autoYes = false } = options;
+  const { autoYes = false, reason } = options;
   // Check if we're in a git repository
   const isRepo = await isGitRepository();
   if (!isRepo) {
@@ -32,7 +33,7 @@ export async function createBranch(options: CreateBranchOptions = {}): Promise<v
   try {
     while (continueLoop) {
       // Generate branch name
-      suggestion = await analyzeBranchName(userFeedback);
+      suggestion = await analyzeBranchName(userFeedback, reason);
 
       if (!suggestion) {
         spinner.stop("No changes found");
