@@ -1,0 +1,23 @@
+src/cli.ts
+  dbdc63bfeddcc481 47,59,368,395-413,421,450,454-455
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "02abb26507812190cb0857ffcdcc463bf2c0aa94",
+  "prompts": {
+    "dbdc63bfeddcc481": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd168-161f-70d2-a8fb-b7c2375230c8",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Patrick Knäpel <patrick.knaepel@pandaliebe.de>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 84,
+      "overriden_lines": 0
+    }
+  }
+}
