@@ -3,9 +3,6 @@ import { basename, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import {
   isGitRepository,
-  getCurrentBranch,
-  switchToBranch,
-  hasUnstagedChanges,
   getRepositoryRoot,
   isValidBranchName,
   getLocalBranches,
@@ -88,36 +85,6 @@ export async function createWorktreeCommand(options: WorktreeOptions = {}): Prom
   const folderSuffix = sanitizeDirectorySegment(branchName);
   if (!folderSuffix) {
     throw new Error("Branch name does not produce a valid folder name.");
-  }
-
-  let currentBranch = await getCurrentBranch();
-  const hasChanges = await hasUnstagedChanges();
-
-  if (currentBranch !== "main" && hasChanges) {
-    throw new Error("You have uncommitted changes on a non-main branch. Commit/stash/discard first.");
-  }
-
-  if (currentBranch !== "main") {
-    spinner.start("Switching to 'main'...");
-    try {
-      await switchToBranch("main");
-      currentBranch = await getCurrentBranch();
-      spinner.stop("Switched to 'main'");
-    } catch (error) {
-      spinner.stop("Failed to switch to 'main'");
-      throw new Error(
-        `Could not switch to 'main': ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
-
-  if (currentBranch !== "main") {
-    throw new Error("Could not switch to 'main'.");
-  }
-
-  const mainHasChanges = await hasUnstagedChanges();
-  if (mainHasChanges) {
-    throw new Error("Main branch has uncommitted changes. Please clean main before creating a worktree.");
   }
 
   const repoRoot = await getRepositoryRoot();
