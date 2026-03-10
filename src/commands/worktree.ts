@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import { basename, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, copyFileSync } from "node:fs";
 import {
   isGitRepository,
   getRepositoryRoot,
@@ -23,15 +23,18 @@ export function sanitizeDirectorySegment(input: string): string {
     .replace(/^[-._]+|[-._]+$/g, "");
 }
 
-async function openShellInDirectory(path: string): Promise<void> {
-  const shell = process.env.SHELL || "bash";
-  const proc = Bun.spawn([shell], {
-    cwd: path,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  await proc.exited;
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(["pbcopy"], {
+      stdin: new Response(text),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function createWorktreeCommand(options: WorktreeOptions = {}): Promise<void> {
@@ -104,16 +107,34 @@ export async function createWorktreeCommand(options: WorktreeOptions = {}): Prom
     throw error;
   }
 
-  p.note(
-    `Branch: ${branchName}\nPath: ${worktreePath}\nBase: main`,
-    "Worktree Created"
-  );
-
-  if (process.stdin.isTTY && process.stdout.isTTY) {
-    p.log.info(`Opening shell in '${worktreePath}'...`);
-    await openShellInDirectory(worktreePath);
-    return;
+  // Copy .env if present
+  const envSource = resolve(repoRoot, ".env");
+  let envCopied = false;
+  if (existsSync(envSource)) {
+    try {
+      copyFileSync(envSource, resolve(worktreePath, ".env"));
+      envCopied = true;
+    } catch {
+      // non-fatal
+    }
   }
 
-  p.note(`Run this command to switch:\ncd ${worktreePath}`, "Next Step");
+  const cdCommand = `cd ${worktreePath}`;
+  const copied = await copyToClipboard(cdCommand);
+
+  const noteLines = [
+    `Branch: ${branchName}`,
+    `Path:   ${worktreePath}`,
+    `Base:   main`,
+    ...(envCopied ? ["", ".env copied from source repo"] : []),
+  ];
+  p.note(noteLines.join("\n"), "Worktree Created");
+
+  if (copied) {
+    p.log.info(`cd command copied to clipboard — just paste and hit Enter`);
+  } else {
+    p.log.info(`Run: cd ${worktreePath}`);
+  }
+
+  p.outro("Done");
 }
