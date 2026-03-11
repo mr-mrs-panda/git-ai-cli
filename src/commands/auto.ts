@@ -10,6 +10,7 @@ import {
   getBranchInfo,
   pushToOrigin,
   isBranchPushed,
+  branchExistsOnRemote,
   isGitHubRepository,
   prExistsForBranch,
 } from "../utils/git.ts";
@@ -394,14 +395,14 @@ export async function auto(options: AutoOptions = {}): Promise<void> {
 
   // Special case: No changes, but branch is pushed and might need a PR
   if (!hasChanges) {
-    const branchIsPushed = await isBranchPushed();
+    const branchIsOnRemote = await branchExistsOnRemote(currentBranch);
     const isGitHub = await isGitHubRepository();
 
     // Only check for PR creation if:
     // 1. We're not on the base branch
-    // 2. Branch is already pushed
+    // 2. Branch exists on remote
     // 3. It's a GitHub repository
-    if (currentBranch !== baseBranch && branchIsPushed && isGitHub) {
+    if (currentBranch !== baseBranch && branchIsOnRemote && isGitHub) {
       p.note(
         `Branch: ${currentBranch}\n` +
         `Base: ${baseBranch}\n` +
